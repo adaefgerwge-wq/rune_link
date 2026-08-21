@@ -55,6 +55,36 @@ class Player {
   static String cosmetic = 'none'; // いま つけているもの
   static Set<String> ownedCosmetics = {'none'}; // 持っているもの
 
+  // つよくなる（ずっと効く強化。⭐で上げる）
+  static int atkLv = 0; // こうげきの強化レベル
+  static int hpLv = 0; // たいりょくの強化レベル
+  static const int maxUpgradeLv = 10;
+
+  /// 印の基礎ダメージ（24 → 64）
+  static int get atk => 24 + atkLv * 4;
+
+  /// さいだいHP（100 → 300）
+  static int get maxHp => 100 + hpLv * 20;
+
+  /// つぎの強化にかかる⭐（上げるほど高くなる）
+  static int upgradeCost(int lv) => 40 + lv * 25;
+
+  /// こうげき／たいりょくを1段あげる
+  static bool buyUpgrade({required bool isAtk}) {
+    final lv = isAtk ? atkLv : hpLv;
+    if (lv >= maxUpgradeLv) return false;
+    final cost = upgradeCost(lv);
+    if (stars < cost) return false;
+    stars -= cost;
+    if (isAtk) {
+      atkLv += 1;
+    } else {
+      hpLv += 1;
+    }
+    save();
+    return true;
+  }
+
   static String _today() {
     final n = DateTime.now();
     return '${n.year}-${n.month.toString().padLeft(2, '0')}-${n.day.toString().padLeft(2, '0')}';
@@ -75,6 +105,8 @@ class Player {
       cosmetic = p.getString('cosmetic') ?? 'none';
       ownedCosmetics =
           (p.getStringList('ownedCosmetics') ?? ['none']).toSet();
+      atkLv = (p.getInt('atkLv') ?? 0).clamp(0, maxUpgradeLv);
+      hpLv = (p.getInt('hpLv') ?? 0).clamp(0, maxUpgradeLv);
       dailyWins = p.getInt('dailyWins') ?? 0;
       dailyElems = p.getInt('dailyElems') ?? 0;
       dailyCrits = p.getInt('dailyCrits') ?? 0;
@@ -167,6 +199,8 @@ class Player {
       await p.setBool('tutorialDone', tutorialDone);
       await p.setString('cosmetic', cosmetic);
       await p.setStringList('ownedCosmetics', ownedCosmetics.toList());
+      await p.setInt('atkLv', atkLv);
+      await p.setInt('hpLv', hpLv);
       await p.setInt('dailyWins', dailyWins);
       await p.setInt('dailyElems', dailyElems);
       await p.setInt('dailyCrits', dailyCrits);
@@ -261,6 +295,8 @@ class Player {
     dailyClaimed = {};
     cosmetic = 'none';
     ownedCosmetics = {'none'};
+    atkLv = 0;
+    hpLv = 0;
     elemUses = {'water': 0, 'fire': 0, 'thunder': 0};
     defeatedByName = {};
     items = {};
@@ -2498,6 +2534,119 @@ class ShopScreen extends StatefulWidget {
 class _ShopScreenState extends State<ShopScreen> {
   String? message;
 
+  void _buyUpgrade({required bool isAtk}) {
+    final lv = isAtk ? Player.atkLv : Player.hpLv;
+    final label = isAtk ? 'こうげき' : 'たいりょく';
+    if (lv >= Player.maxUpgradeLv) {
+      setState(() => message = '$labelは これいじょう あがらない！');
+      return;
+    }
+    if (!Player.buyUpgrade(isAtk: isAtk)) {
+      setState(() => message = '⭐がたりない…');
+      return;
+    }
+    setState(() => message = '$labelが つよくなった！');
+    Sfx.play('win.wav');
+  }
+
+  /// つよくなるカード（こうげき／たいりょく）
+  Widget _upgradeCard({
+    required bool isAtk,
+    required String title,
+    required String unit,
+    required int now,
+    required int step,
+    required IconData icon,
+    required Color color,
+  }) {
+    final lv = isAtk ? Player.atkLv : Player.hpLv;
+    final maxed = lv >= Player.maxUpgradeLv;
+    final cost = Player.upgradeCost(lv);
+    final canBuy = !maxed && Player.stars >= cost;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: cardDeco(),
+      child: Row(children: [
+        Container(
+          width: 54,
+          height: 54,
+          decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(16)),
+          child: Icon(icon, color: color, size: 28),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Text(title,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        color: kInk)),
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                  decoration: BoxDecoration(
+                      color: kPurple.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(999)),
+                  child: Text('Lv.$lv / ${Player.maxUpgradeLv}',
+                      style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: kPurpleDeep)),
+                ),
+              ]),
+              const SizedBox(height: 2),
+              Text(
+                  maxed
+                      ? 'いま $now$unit（さいだい）'
+                      : 'いま $now$unit → $step$unit に あがる',
+                  style: const TextStyle(fontSize: 12, color: kInkSoft)),
+              const SizedBox(height: 6),
+              // 強化の進みぐあい
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  value: lv / Player.maxUpgradeLv,
+                  minHeight: 6,
+                  backgroundColor: color.withValues(alpha: 0.15),
+                  valueColor: AlwaysStoppedAnimation(color),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        ChunkyPill(
+          onTap: () => _buyUpgrade(isAtk: isAtk),
+          color: canBuy ? kGreen : const Color(0xFFD6D6E0),
+          edge: canBuy ? kGreenDeep : const Color(0xFFBFBFCC),
+          child: maxed
+              ? const Text('MAX',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14))
+              : Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.star_rounded,
+                      color: Colors.white, size: 16),
+                  const SizedBox(width: 3),
+                  Text('$cost',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14)),
+                ]),
+        ),
+      ]),
+    );
+  }
+
   void _buy(ShopItem item) {
     if (Player.stars < item.price) {
       setState(() => message = '⭐がたりない…');
@@ -2538,6 +2687,26 @@ class _ShopScreenState extends State<ShopScreen> {
               style: const TextStyle(
                   color: kPurpleDeep, fontWeight: FontWeight.w800)),
         ),
+      const _ShopHeading('つよくなる', 'ずっと 効く'),
+      _upgradeCard(
+        isAtk: true,
+        title: 'こうげき',
+        unit: '',
+        now: Player.atk,
+        step: Player.atk + 4,
+        icon: Icons.bolt_rounded,
+        color: const Color(0xFFF5B920),
+      ),
+      _upgradeCard(
+        isAtk: false,
+        title: 'たいりょく',
+        unit: '',
+        now: Player.maxHp,
+        step: Player.maxHp + 20,
+        icon: Icons.favorite_rounded,
+        color: kHeart,
+      ),
+      const _ShopHeading('もちもの', 'バトル中に つかう'),
       ...kShopItems.map((item) => Container(
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(14),
@@ -2608,6 +2777,26 @@ class _ShopScreenState extends State<ShopScreen> {
             ]),
           )),
     ]);
+  }
+}
+
+/// ショップの区切り見出し
+class _ShopHeading extends StatelessWidget {
+  final String title;
+  final String note;
+  const _ShopHeading(this.title, this.note);
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8, top: 4),
+      child: Row(children: [
+        Text(title,
+            style: const TextStyle(
+                fontWeight: FontWeight.w800, fontSize: 16, color: kInk)),
+        const SizedBox(width: 8),
+        Text(note, style: const TextStyle(fontSize: 11, color: kInkSoft)),
+      ]),
+    );
   }
 }
 
@@ -4175,8 +4364,8 @@ class _BattleScreenState extends State<BattleScreen>
   Elem weakness = Elem.water;
   late EnemyType enemy;
   int defeated = 0; // このバトルで倒した数
-  int playerMaxHp = 100;
-  int playerHp = 100;
+  int playerMaxHp = Player.maxHp;
+  int playerHp = Player.maxHp;
 
   Phase phase = Phase.playerTurn;
   String banner = '';
@@ -4374,7 +4563,7 @@ class _BattleScreenState extends State<BattleScreen>
     final weaknessMul = elem == weakness ? 2 : 1;
     final accMul = 0.6 + score * 0.8;
     final itemMul = powerUp ? 1.5 : 1.0; // ちからのおまもり
-    final dmg = (24 * weaknessMul * accMul * itemMul).round();
+    final dmg = (Player.atk * weaknessMul * accMul * itemMul).round();
     final crit = score > 0.85;
     Player.recordElem(elem, crit: crit); // 統計：どの印をよく使うか
 
@@ -4446,6 +4635,7 @@ class _BattleScreenState extends State<BattleScreen>
     _celebrate.reset();
     Bgm.play(Bgm.forStage(widget.stage)); // 曲をかけ直す
     setState(() {
+      playerMaxHp = Player.maxHp; // ショップで強化していたら反映する
       playerHp = playerMaxHp;
       result = null;
       _showResult = false;
