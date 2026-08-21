@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "rune-link",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "cd /Users/tetsuro/practice/rune_link && /opt/homebrew/bin/flutter run -d web-server --web-port 5179 --web-hostname 127.0.0.1"
+      ],
+      "port": 5179
+    }
+  ]
+}

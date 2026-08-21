@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="ゆびで印をかいて たたかう ぼうけんゲーム">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="印バトル">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <meta name="theme-color" content="#8B6FE0">
+  <title>印つなぎバトル</title>
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <!-- アプリが立ち上がるまでの あいだに見せる画面 -->
+  <style>
+    #boot {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: linear-gradient(180deg, #E8E1F9 0%, #F0E9FC 55%, #F3EFFB 100%);
+      font-family: sans-serif; transition: opacity .45s ease;
+    }
+    #boot img { width: 132px; height: 132px; border-radius: 30px; background: #fff; }
+    #boot .t { margin-top: 20px; color: #8B6FE0; font-weight: 800; font-size: 20px;
+               letter-spacing: .04em; }
+    #boot .d { margin-top: 12px; display: flex; gap: 7px; }
+    #boot .d i { width: 9px; height: 9px; border-radius: 50%; background: #C7B6F5;
+                 display: block; animation: bp 1.1s infinite ease-in-out; }
+    #boot .d i:nth-child(2) { animation-delay: .15s; }
+    #boot .d i:nth-child(3) { animation-delay: .3s; }
+    @keyframes bp { 0%,100% { transform: translateY(0); opacity:.55 }
+                    40% { transform: translateY(-7px); opacity:1 } }
+  </style>
+  <div id="boot">
+    <img src="icons/Icon-512.png" alt="">
+    <div class="t">印つなぎバトル</div>
+    <div class="d"><i></i><i></i><i></i></div>
+  </div>
+  <script>
+    // Flutterが描き始めたら 起動画面を消す
+    (function () {
+      var hide = function () {
+        var b = document.getElementById('boot');
+        if (!b) return;
+        b.style.opacity = '0';
+        setTimeout(function () { if (b.parentNode) b.remove(); }, 480);
+      };
+      window.addEventListener('flutter-first-frame', hide);
+      // 保険：イベントが来なくても 12秒たったら必ず消す（画面が固まらないように）
+      setTimeout(hide, 12000);
+    })();
+  </script>
+
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
