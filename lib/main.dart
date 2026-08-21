@@ -55,6 +55,30 @@ class Player {
   static String cosmetic = 'none'; // いま つけているもの
   static Set<String> ownedCosmetics = {'none'}; // 持っているもの
 
+  // ステージごとの いちばん上のクリア済みむずかしさ
+  // （ステージ番号 → 0=ふつう / 1=つよい / 2=げきつよ。無ければ未クリア）
+  static Map<int, int> stageBest = {};
+
+  /// そのステージの むずかしさを選べるか
+  /// ふつうは クリア済みなら常に選べる。上は ひとつ下をクリアしてから
+  static bool diffUnlocked(int stage, int diff) {
+    if (stage > cleared) return diff == 0; // 初挑戦は ふつうだけ
+    if (diff == 0) return true;
+    return (stageBest[stage] ?? -1) >= diff - 1;
+  }
+
+  /// そのステージ・むずかしさを クリア済みか
+  static bool diffCleared(int stage, int diff) =>
+      (stageBest[stage] ?? -1) >= diff;
+
+  /// クリアを記録する（今までより上なら 更新）
+  static void recordStageClear(int stage, int diff) {
+    if ((stageBest[stage] ?? -1) < diff) {
+      stageBest[stage] = diff;
+      save();
+    }
+  }
+
   // つよくなる（ずっと効く強化。⭐で上げる）
   static int atkLv = 0; // こうげきの強化レベル
   static int hpLv = 0; // たいりょくの強化レベル
@@ -107,6 +131,11 @@ class Player {
           (p.getStringList('ownedCosmetics') ?? ['none']).toSet();
       atkLv = (p.getInt('atkLv') ?? 0).clamp(0, maxUpgradeLv);
       hpLv = (p.getInt('hpLv') ?? 0).clamp(0, maxUpgradeLv);
+      stageBest = {};
+      for (var n = 1; n <= kStageCount; n++) {
+        final v = p.getInt('best_$n');
+        if (v != null) stageBest[n] = v.clamp(0, kDifficulties.length - 1);
+      }
       dailyWins = p.getInt('dailyWins') ?? 0;
       dailyElems = p.getInt('dailyElems') ?? 0;
       dailyCrits = p.getInt('dailyCrits') ?? 0;
@@ -201,6 +230,9 @@ class Player {
       await p.setStringList('ownedCosmetics', ownedCosmetics.toList());
       await p.setInt('atkLv', atkLv);
       await p.setInt('hpLv', hpLv);
+      for (final e in stageBest.entries) {
+        await p.setInt('best_${e.key}', e.value);
+      }
       await p.setInt('dailyWins', dailyWins);
       await p.setInt('dailyElems', dailyElems);
       await p.setInt('dailyCrits', dailyCrits);
@@ -223,9 +255,9 @@ class Player {
   }
 
   /// 勝利時の記録
-  static void recordWin(String enemyName) {
+  static void recordWin(String enemyName, {int reward = 15}) {
     trophies += 1;
-    stars += 15;
+    stars += reward;
     todayWins += 1;
     dailyWins += 1;
     defeatedByName[enemyName] = (defeatedByName[enemyName] ?? 0) + 1;
@@ -297,6 +329,7 @@ class Player {
     ownedCosmetics = {'none'};
     atkLv = 0;
     hpLv = 0;
+    stageBest = {};
     elemUses = {'water': 0, 'fire': 0, 'thunder': 0};
     defeatedByName = {};
     items = {};
@@ -518,6 +551,32 @@ const List<EnemyType> kEnemies = [
 
 /// ステージの数（敵の種類ぶん）
 const int kStageCount = 6;
+
+/// ステージの むずかしさ（クリア済みステージを 何度でも遊ぶための段階）
+class Difficulty {
+  final String label;
+  final double hpMul; // 敵のHP倍率
+  final double atkMul; // 敵の攻撃力倍率
+  final double starMul; // もらえる⭐の倍率
+  final Color color;
+  final IconData icon;
+  const Difficulty(this.label, this.hpMul, this.atkMul, this.starMul,
+      this.color, this.icon);
+}
+
+const List<Difficulty> kDifficulties = [
+  Difficulty('ふつう', 1.0, 1.0, 1.0, kGreen, Icons.sentiment_satisfied_rounded),
+  Difficulty('つよい', 1.6, 1.3, 2.0, Color(0xFFF5B920),
+      Icons.local_fire_department_rounded),
+  Difficulty('げきつよ', 2.4, 1.6, 3.5, kHeart, Icons.whatshot_rounded),
+];
+
+/// そのステージ・むずかしさで 勝ったときにもらえる⭐
+/// 先のステージほど、むずかしいほど 多くもらえる
+int winStars(int stage, int diff) {
+  final base = 15 + (stage - 1) * 5; // ステージ1:15 → ステージ6:40
+  return (base * kDifficulties[diff].starMul).round();
+}
 
 enum Elem { water, fire, thunder }
 
@@ -3532,10 +3591,131 @@ class _StageSelectScreenState extends State<StageSelectScreen> {
     super.dispose();
   }
 
-  void _go(int stage) async {
-    await Navigator.of(context).push(fadeSlowRoute(BattleScreen(stage: stage)));
+  void _go(int stage, [int diff = 0]) async {
+    await Navigator.of(context)
+        .push(fadeSlowRoute(BattleScreen(stage: stage, diff: diff)));
     Bgm.play(Bgm.home);
     setState(() {});
+  }
+
+  /// ステージを押したとき
+  /// はじめてのステージは そのまま／クリア済みなら むずかしさを選ぶ
+  void _tapStage(int stage) {
+    if (stage > Player.cleared) {
+      _go(stage);
+      return;
+    }
+    _pickDifficulty(stage);
+  }
+
+  /// むずかしさを選ぶシート
+  void _pickDifficulty(int stage) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      // 画面が短くても はみ出さないように スクロールできるようにする
+      isScrollControlled: true,
+      builder: (sheetCtx) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 26),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+          // つまみ
+          Container(
+            width: 44,
+            height: 5,
+            margin: const EdgeInsets.only(bottom: 14),
+            decoration: BoxDecoration(
+                color: const Color(0xFFE0E0E8),
+                borderRadius: BorderRadius.circular(999)),
+          ),
+          Text('ステージ$stage  むずかしさ',
+              style: const TextStyle(
+                  fontWeight: FontWeight.w800, fontSize: 17, color: kInk)),
+          const SizedBox(height: 4),
+          const Text('むずかしいほど ⭐がたくさん もらえる',
+              style: TextStyle(fontSize: 12, color: kInkSoft)),
+          const SizedBox(height: 14),
+            for (var d = 0; d < kDifficulties.length; d++)
+              _diffRow(sheetCtx, stage, d),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  /// むずかしさ1つぶんの行
+  Widget _diffRow(BuildContext sheetCtx, int stage, int d) {
+    final def = kDifficulties[d];
+    final open = Player.diffUnlocked(stage, d);
+    final done = Player.diffCleared(stage, d);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: open ? def.color.withValues(alpha: 0.10) : const Color(0xFFF2F2F7),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+              color: open ? def.color.withValues(alpha: 0.20) : Colors.white,
+              borderRadius: BorderRadius.circular(14)),
+          child: Icon(open ? def.icon : Icons.lock,
+              color: open ? def.color : const Color(0xFFCFCFDA), size: 24),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Text(def.label,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        color: open ? kInk : kInkSoft)),
+                if (done) ...[
+                  const SizedBox(width: 6),
+                  const Icon(Icons.check_circle_rounded,
+                      color: kGreen, size: 16),
+                ],
+              ]),
+              const SizedBox(height: 2),
+              Text(
+                  open
+                      ? 'てきのHP ${def.hpMul}ばい ／ こうげき ${def.atkMul}ばい'
+                      : '${kDifficulties[d - 1].label}を クリアすると ひらく',
+                  style: const TextStyle(fontSize: 11, color: kInkSoft)),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        if (open)
+          ChunkyPill(
+            onTap: () {
+              Navigator.of(sheetCtx).pop();
+              _go(stage, d);
+            },
+            color: kGreen,
+            edge: kGreenDeep,
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.star_rounded, color: Colors.white, size: 15),
+              const SizedBox(width: 3),
+              Text('${winStars(stage, d)}',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14)),
+            ]),
+          ),
+      ]),
+    );
   }
 
   // 1ステージぶんの表示
@@ -3548,7 +3728,7 @@ class _StageSelectScreenState extends State<StageSelectScreen> {
     return Align(
       alignment: Alignment(offsetX, 0),
       child: GestureDetector(
-        onTap: unlocked ? () => _go(n) : null,
+        onTap: unlocked ? () => _tapStage(n) : null,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           if (next)
             Container(
@@ -3574,7 +3754,7 @@ class _StageSelectScreenState extends State<StageSelectScreen> {
                 : unlocked
                     ? kPurpleDeep
                     : const Color(0xFFCFCFDA),
-            onTap: unlocked ? () => _go(n) : null,
+            onTap: unlocked ? () => _tapStage(n) : null,
             child: Icon(
                 cleared
                     ? Icons.star_rounded
@@ -3612,15 +3792,31 @@ class _StageSelectScreenState extends State<StageSelectScreen> {
                 const Icon(Icons.question_mark_rounded,
                     size: 17, color: Color(0xFFCFCFDA)),
               const SizedBox(width: 5),
-              Row(
-                children: List.generate(
-                    3,
-                    (s) => Icon(Icons.local_fire_department,
-                        size: 12,
-                        color: s <= (i ~/ 2)
-                            ? const Color(0xFFFF9600)
-                            : const Color(0xFFE0E0E8))),
-              ),
+              if (cleared)
+                // クリア済み：どのむずかしさまで倒したかが ひと目でわかる
+                Row(
+                  children: List.generate(
+                      kDifficulties.length,
+                      (d) => Padding(
+                            padding: const EdgeInsets.only(right: 1),
+                            child: Icon(kDifficulties[d].icon,
+                                size: 12,
+                                color: Player.diffCleared(n, d)
+                                    ? kDifficulties[d].color
+                                    : const Color(0xFFE0E0E8)),
+                          )),
+                )
+              else
+                // まだ：このステージの手ごわさの目安
+                Row(
+                  children: List.generate(
+                      3,
+                      (s) => Icon(Icons.local_fire_department,
+                          size: 12,
+                          color: s <= (i ~/ 2)
+                              ? const Color(0xFFFF9600)
+                              : const Color(0xFFE0E0E8))),
+                ),
             ]),
           ),
         ]),
@@ -4334,8 +4530,9 @@ class RuneRecognizer {
 enum Phase { playerTurn, resolving }
 
 class BattleScreen extends StatefulWidget {
-  final int stage; // 1..3
-  const BattleScreen({super.key, this.stage = 1});
+  final int stage; // 1..kStageCount
+  final int diff; // むずかしさ（kDifficulties の番号）
+  const BattleScreen({super.key, this.stage = 1, this.diff = 0});
   @override
   State<BattleScreen> createState() => _BattleScreenState();
 }
@@ -4366,6 +4563,14 @@ class _BattleScreenState extends State<BattleScreen>
   int defeated = 0; // このバトルで倒した数
   int playerMaxHp = Player.maxHp;
   int playerHp = Player.maxHp;
+
+  /// このバトルの むずかしさ
+  Difficulty get _diff =>
+      kDifficulties[widget.diff.clamp(0, kDifficulties.length - 1)];
+
+  /// 勝ったときにもらえる⭐
+  int get _reward => winStars(
+      widget.stage, widget.diff.clamp(0, kDifficulties.length - 1));
 
   Phase phase = Phase.playerTurn;
   String banner = '';
@@ -4470,7 +4675,8 @@ class _BattleScreenState extends State<BattleScreen>
     final maxIdx = (widget.stage - 1).clamp(0, kEnemies.length - 1);
     final idx = _rng.nextInt(maxIdx + 1);
     enemy = kEnemies[idx];
-    enemyMaxHp = enemy.baseHp + _rng.nextInt(40) + (widget.stage - 1) * 20;
+    final base = enemy.baseHp + _rng.nextInt(40) + (widget.stage - 1) * 20;
+    enemyMaxHp = (base * _diff.hpMul).round();
     enemyHp = enemyMaxHp;
     weakness = Elem.values[_rng.nextInt(Elem.values.length)];
   }
@@ -4583,13 +4789,16 @@ class _BattleScreenState extends State<BattleScreen>
       if (!mounted) return;
       if (enemyHp <= 0) {
         Sfx.play('win.wav');
-        Player.recordWin(enemy.name);
+        Player.recordWin(enemy.name, reward: _reward);
         defeated++;
         // ステージ解放：クリアしたら次のステージが開く
         if (widget.stage > Player.cleared) {
           Player.cleared = widget.stage;
           Player.save();
         }
+        // このむずかしさをクリアした記録（上のむずかしさが開く）
+        Player.recordStageClear(
+            widget.stage, widget.diff.clamp(0, kDifficulties.length - 1));
         setState(() {
           result = 'win';
           _showResult = true;
@@ -4599,6 +4808,7 @@ class _BattleScreenState extends State<BattleScreen>
       }
       // 敵の反撃（シームレスに続く）＋ここで入力を再開
       var atk = enemy.atkMin + _rng.nextInt(enemy.atkMax - enemy.atkMin + 1);
+      atk = (atk * _diff.atkMul).round(); // むずかしさ
       if (guardUp) atk = (atk * 0.5).round(); // まもりのマント
       setState(() {
         playerHp = (playerHp - atk).clamp(0, playerMaxHp);
@@ -5208,18 +5418,18 @@ class _BattleScreenState extends State<BattleScreen>
                   color: kStar.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
                 ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: const [
-                  Icon(Icons.star_rounded, color: kStar, size: 26),
-                  SizedBox(width: 8),
-                  Text('+15',
-                      style: TextStyle(
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.star_rounded, color: kStar, size: 26),
+                  const SizedBox(width: 8),
+                  Text('+$_reward',
+                      style: const TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 20,
                           color: kInk)),
-                  SizedBox(width: 12),
-                  Icon(Icons.emoji_events, color: kGold, size: 24),
-                  SizedBox(width: 6),
-                  Text('+1',
+                  const SizedBox(width: 12),
+                  const Icon(Icons.emoji_events, color: kGold, size: 24),
+                  const SizedBox(width: 6),
+                  const Text('+1',
                       style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 20,
