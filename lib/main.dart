@@ -55,6 +55,24 @@ class Player {
   static String cosmetic = 'none'; // いま つけているもの
   static Set<String> ownedCosmetics = {'none'}; // 持っているもの
 
+  // クリアした ちょうせん（kChallenges の番号）
+  static Set<int> challengeCleared = {};
+
+  /// そのちょうせんに 挑めるか（そのステージまで進んでいれば）
+  static bool challengeOpen(int i) => kChallenges[i].stage <= cleared;
+
+  /// ちょうせんクリアを記録して ⭐をわたす
+  /// はじめてなら まるごと、2回目からは 少しだけ
+  static int recordChallenge(int i) {
+    final c = kChallenges[i];
+    final first = !challengeCleared.contains(i);
+    final gain = first ? c.reward : c.repeatReward;
+    challengeCleared.add(i);
+    stars += gain;
+    save();
+    return gain;
+  }
+
   // ステージごとの いちばん上のクリア済みむずかしさ
   // （ステージ番号 → 0=ふつう / 1=つよい / 2=げきつよ。無ければ未クリア）
   static Map<int, int> stageBest = {};
@@ -132,6 +150,10 @@ class Player {
       atkLv = (p.getInt('atkLv') ?? 0).clamp(0, maxUpgradeLv);
       hpLv = (p.getInt('hpLv') ?? 0).clamp(0, maxUpgradeLv);
       stageBest = {};
+      challengeCleared = (p.getStringList('challengeCleared') ?? [])
+          .map((e) => int.tryParse(e) ?? -1)
+          .where((e) => e >= 0 && e < kChallenges.length)
+          .toSet();
       for (var n = 1; n <= kStageCount; n++) {
         final v = p.getInt('best_$n');
         if (v != null) stageBest[n] = v.clamp(0, kDifficulties.length - 1);
@@ -233,6 +255,8 @@ class Player {
       for (final e in stageBest.entries) {
         await p.setInt('best_${e.key}', e.value);
       }
+      await p.setStringList('challengeCleared',
+          challengeCleared.map((e) => e.toString()).toList());
       await p.setInt('dailyWins', dailyWins);
       await p.setInt('dailyElems', dailyElems);
       await p.setInt('dailyCrits', dailyCrits);
@@ -330,6 +354,7 @@ class Player {
     atkLv = 0;
     hpLv = 0;
     stageBest = {};
+    challengeCleared = {};
     elemUses = {'water': 0, 'fire': 0, 'thunder': 0};
     defeatedByName = {};
     items = {};
@@ -569,6 +594,104 @@ const List<Difficulty> kDifficulties = [
   Difficulty('つよい', 1.6, 1.3, 2.0, Color(0xFFF5B920),
       Icons.local_fire_department_rounded),
   Difficulty('げきつよ', 2.4, 1.6, 3.5, kHeart, Icons.whatshot_rounded),
+];
+
+/// とくべつなルールで戦う ちょうせん
+/// 新しいバトルを作らず、いまのバトルに条件を足して 遊びを増やす
+class Challenge {
+  final String name;
+  final String rule; // 条件の ひとこと説明
+  final IconData icon;
+  final Color color;
+  final int enemyIndex; // どの敵と戦うか（固定）
+  final int stage; // 背景と曲に使うステージ
+  final int turnLimit; // 0 なら ターン制限なし
+  final bool noItems; // もちものを つかえない
+  final Elem? onlyElem; // この印しか つかえない
+  final double enemyAtkMul; // 敵の攻撃力倍率
+  final int hpDrain; // 毎ターン へるHP
+  final int reward; // はじめてクリアしたときの⭐
+  const Challenge({
+    required this.name,
+    required this.rule,
+    required this.icon,
+    required this.color,
+    required this.enemyIndex,
+    required this.stage,
+    required this.reward,
+    this.turnLimit = 0,
+    this.noItems = false,
+    this.onlyElem,
+    this.enemyAtkMul = 1.0,
+    this.hpDrain = 0,
+  });
+
+  /// 2回目からの⭐（くり返し遊べるように 少しだけ入る）
+  int get repeatReward => (reward * 0.25).round();
+}
+
+const List<Challenge> kChallenges = [
+  Challenge(
+    name: 'はやうち',
+    rule: '3ターン いないに たおす',
+    icon: Icons.bolt_rounded,
+    color: Color(0xFFF5B920),
+    enemyIndex: 0,
+    stage: 1,
+    turnLimit: 3,
+    reward: 120,
+  ),
+  Challenge(
+    name: 'ひとつの印',
+    rule: 'ひ の印しか つかえない',
+    icon: Icons.local_fire_department_rounded,
+    color: Color(0xFFFF6B6B),
+    enemyIndex: 1,
+    stage: 2,
+    onlyElem: Elem.fire,
+    reward: 150,
+  ),
+  Challenge(
+    name: 'どうぐなし',
+    rule: 'もちものを つかえない',
+    icon: Icons.block_rounded,
+    color: Color(0xFF8FD9C4),
+    enemyIndex: 2,
+    stage: 3,
+    noItems: true,
+    reward: 180,
+  ),
+  Challenge(
+    name: 'はんげき',
+    rule: 'てきの こうげきが 2ばい',
+    icon: Icons.shield_moon_rounded,
+    color: Color(0xFF9FD8F5),
+    enemyIndex: 3,
+    stage: 4,
+    enemyAtkMul: 2.0,
+    reward: 220,
+  ),
+  Challenge(
+    name: 'じりひん',
+    rule: 'まいターン HPが 5へる',
+    icon: Icons.hourglass_bottom_rounded,
+    color: Color(0xFFFFB27A),
+    enemyIndex: 4,
+    stage: 5,
+    hpDrain: 5,
+    reward: 260,
+  ),
+  Challenge(
+    name: 'さいごの しれん',
+    rule: 'もちものなし ＋ こうげき2ばい',
+    icon: Icons.workspace_premium_rounded,
+    color: Color(0xFFC7B6F5),
+    enemyIndex: 5,
+    stage: 6,
+    noItems: true,
+    enemyAtkMul: 2.0,
+    reward: 400,
+  ),
 ];
 
 /// そのステージ・むずかしさで 勝ったときにもらえる⭐
@@ -1258,6 +1381,14 @@ class _AppDrawerState extends State<AppDrawer> {
                         builder: (_) => const MissionScreen()));
                   });
                 }),
+                _tile(Icons.military_tech_rounded, 'ちょうせん', () {
+                  _guard('ちょうせんを ひらきますか？',
+                      'バトルは そのまま。とじると もどれます。', (nav) {
+                    nav.pop();
+                    nav.push(MaterialPageRoute(
+                        builder: (_) => const ChallengeScreen()));
+                  });
+                }),
                 _tile(Icons.checkroom_rounded, 'きせかえ', () {
                   _guard('きせかえを ひらきますか？',
                       'バトルは そのまま。とじると もどれます。', (nav) {
@@ -1794,6 +1925,8 @@ class _HomeScreenState extends State<HomeScreen> {
           const Color(0xFFE9A41C), const ShopScreen()),
       item(Icons.flag_rounded, 'ミッション', const Color(0xFFD9F5EC),
           const Color(0xFF2FA98A), const MissionScreen()),
+      item(Icons.military_tech_rounded, 'ちょうせん', const Color(0xFFFFE4E4),
+          const Color(0xFFE05A5A), const ChallengeScreen()),
       item(Icons.checkroom_rounded, 'きせかえ', const Color(0xFFF3E8FC),
           kPurple, const DressUpScreen()),
     ]);
@@ -2836,6 +2969,124 @@ class _ShopScreenState extends State<ShopScreen> {
             ]),
           )),
     ]);
+  }
+}
+
+// ======================= ちょうせん =======================
+class ChallengeScreen extends StatefulWidget {
+  const ChallengeScreen({super.key});
+  @override
+  State<ChallengeScreen> createState() => _ChallengeScreenState();
+}
+
+class _ChallengeScreenState extends State<ChallengeScreen> {
+  void _go(int i) async {
+    final c = kChallenges[i];
+    await Navigator.of(context).push(fadeSlowRoute(
+        BattleScreen(stage: c.stage, challenge: i)));
+    Bgm.play(Bgm.home);
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final done = kChallenges
+        .asMap()
+        .keys
+        .where(Player.challengeCleared.contains)
+        .length;
+    return SubScreen(title: 'ちょうせん', children: [
+      Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.all(14),
+        decoration: cardDeco(),
+        child: Row(children: [
+          DressedChar(size: 44),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$done / ${kChallenges.length} たっせい',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        color: kInk)),
+                const SizedBox(height: 2),
+                const Text('とくべつな ルールで たたかう',
+                    style: TextStyle(fontSize: 12, color: kInkSoft)),
+              ],
+            ),
+          ),
+        ]),
+      ),
+      for (var i = 0; i < kChallenges.length; i++) _row(i),
+    ]);
+  }
+
+  Widget _row(int i) {
+    final c = kChallenges[i];
+    final open = Player.challengeOpen(i);
+    final cleared = Player.challengeCleared.contains(i);
+    // クリア済みは 2回目からの⭐を出す（もらえる数を偽らない）
+    final gain = cleared ? c.repeatReward : c.reward;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: cardDeco(),
+      child: Row(children: [
+        Container(
+          width: 54,
+          height: 54,
+          decoration: BoxDecoration(
+              color: open
+                  ? c.color.withValues(alpha: 0.15)
+                  : const Color(0xFFF2F2F7),
+              borderRadius: BorderRadius.circular(16)),
+          child: Icon(open ? c.icon : Icons.lock,
+              color: open ? c.color : const Color(0xFFCFCFDA), size: 28),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Text(c.name,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        color: open ? kInk : kInkSoft)),
+                if (cleared) ...[
+                  const SizedBox(width: 6),
+                  const Icon(Icons.check_circle_rounded,
+                      color: kGreen, size: 16),
+                ],
+              ]),
+              const SizedBox(height: 2),
+              Text(open ? c.rule : 'ステージ${c.stage}を クリアすると ひらく',
+                  style: const TextStyle(fontSize: 12, color: kInkSoft)),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        if (open)
+          ChunkyPill(
+            onTap: () => _go(i),
+            color: kGreen,
+            edge: kGreenDeep,
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.star_rounded, color: Colors.white, size: 16),
+              const SizedBox(width: 3),
+              Text('$gain',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14)),
+            ]),
+          ),
+      ]),
+    );
   }
 }
 
@@ -4532,7 +4783,9 @@ enum Phase { playerTurn, resolving }
 class BattleScreen extends StatefulWidget {
   final int stage; // 1..kStageCount
   final int diff; // むずかしさ（kDifficulties の番号）
-  const BattleScreen({super.key, this.stage = 1, this.diff = 0});
+  final int challenge; // ちょうせんの番号（-1 なら ふつうのバトル）
+  const BattleScreen(
+      {super.key, this.stage = 1, this.diff = 0, this.challenge = -1});
   @override
   State<BattleScreen> createState() => _BattleScreenState();
 }
@@ -4564,13 +4817,34 @@ class _BattleScreenState extends State<BattleScreen>
   int playerMaxHp = Player.maxHp;
   int playerHp = Player.maxHp;
 
+  /// このバトルの ちょうせん（ふつうのバトルなら null）
+  Challenge? get _ch =>
+      (widget.challenge >= 0 && widget.challenge < kChallenges.length)
+          ? kChallenges[widget.challenge]
+          : null;
+
+  /// このバトルで つかったターン数
+  int turns = 0;
+
+  /// 勝ったとき じっさいにもらった⭐（勝利画面に出す）
+  int _gained = 0;
+
   /// このバトルの むずかしさ
   Difficulty get _diff =>
       kDifficulties[widget.diff.clamp(0, kDifficulties.length - 1)];
 
   /// 勝ったときにもらえる⭐
-  int get _reward => winStars(
-      widget.stage, widget.diff.clamp(0, kDifficulties.length - 1));
+  int get _reward {
+    final c = _ch;
+    if (c != null) {
+      // はじめてクリアなら まるごと、2回目からは 少しだけ
+      return Player.challengeCleared.contains(widget.challenge)
+          ? c.repeatReward
+          : c.reward;
+    }
+    return winStars(
+        widget.stage, widget.diff.clamp(0, kDifficulties.length - 1));
+  }
 
   Phase phase = Phase.playerTurn;
   String banner = '';
@@ -4671,6 +4945,17 @@ class _BattleScreenState extends State<BattleScreen>
   }
 
   void _newEnemy() {
+    turns = 0;
+    final c = _ch;
+    if (c != null) {
+      // ちょうせん：毎回おなじ条件で挑めるように 敵もHPも固定する
+      enemy = kEnemies[c.enemyIndex];
+      enemyMaxHp = enemy.baseHp + (c.stage - 1) * 20;
+      enemyHp = enemyMaxHp;
+      // つかえる印がしばられているときは その印を弱点にする（勝てる条件にする）
+      weakness = c.onlyElem ?? Elem.values[_rng.nextInt(Elem.values.length)];
+      return;
+    }
     // ステージが進むほど強い敵が出やすい
     final maxIdx = (widget.stage - 1).clamp(0, kEnemies.length - 1);
     final idx = _rng.nextInt(maxIdx + 1);
@@ -4684,6 +4969,13 @@ class _BattleScreenState extends State<BattleScreen>
   // アイテムを使う
   void _useItem(ShopItem item) {
     if (_loading || _showTutorial || result != null) return;
+    if (_ch?.noItems ?? false) {
+      setState(() {
+        banner = 'この ちょうせんでは つかえない';
+        bannerColor = kInkSoft;
+      });
+      return;
+    }
     if (item.name == 'ちからのおまもり' && powerUp) {
       setState(() {
         banner = 'もう つかっている';
@@ -4766,6 +5058,22 @@ class _BattleScreenState extends State<BattleScreen>
       return;
     }
 
+    // ちょうせん：つかえる印がしばられていることがある
+    final only = _ch?.onlyElem;
+    if (only != null && elem != only) {
+      setState(() {
+        banner = '${elemLabel(only)} の印だけ！';
+        bannerColor = kHeart;
+        stroke = [];
+      });
+      Future.delayed(const Duration(milliseconds: 700), () {
+        if (mounted && phase == Phase.playerTurn && result == null) {
+          setState(() => banner = '');
+        }
+      });
+      return;
+    }
+
     final weaknessMul = elem == weakness ? 2 : 1;
     final accMul = 0.6 + score * 0.8;
     final itemMul = powerUp ? 1.5 : 1.0; // ちからのおまもり
@@ -4777,6 +5085,7 @@ class _BattleScreenState extends State<BattleScreen>
     setState(() {
       phase = Phase.resolving;
       stroke = [];
+      turns += 1;
       enemyHp = (enemyHp - dmg).clamp(0, enemyMaxHp);
       banner = crit ? 'キレイ！ $dmg' : '$dmg';
       bannerColor = elemColor(elem);
@@ -4789,16 +5098,22 @@ class _BattleScreenState extends State<BattleScreen>
       if (!mounted) return;
       if (enemyHp <= 0) {
         Sfx.play('win.wav');
-        Player.recordWin(enemy.name, reward: _reward);
-        defeated++;
-        // ステージ解放：クリアしたら次のステージが開く
-        if (widget.stage > Player.cleared) {
-          Player.cleared = widget.stage;
-          Player.save();
+        if (_ch != null) {
+          // ちょうせん：ステージの解放はせず、ちょうせんのクリアだけ記録する
+          Player.recordWin(enemy.name, reward: 0);
+          _gained = Player.recordChallenge(widget.challenge);
+        } else {
+          _gained = _reward;
+          Player.recordWin(enemy.name, reward: _reward);
+          // ステージ解放：クリアしたら次のステージが開く
+          if (widget.stage > Player.cleared) {
+            Player.cleared = widget.stage;
+            Player.save();
+          }
+          // このむずかしさをクリアした記録（上のむずかしさが開く）
+          Player.recordStageClear(
+              widget.stage, widget.diff.clamp(0, kDifficulties.length - 1));
         }
-        // このむずかしさをクリアした記録（上のむずかしさが開く）
-        Player.recordStageClear(
-            widget.stage, widget.diff.clamp(0, kDifficulties.length - 1));
         setState(() {
           result = 'win';
           _showResult = true;
@@ -4807,16 +5122,30 @@ class _BattleScreenState extends State<BattleScreen>
         return;
       }
       // 敵の反撃（シームレスに続く）＋ここで入力を再開
+      final c = _ch;
       var atk = enemy.atkMin + _rng.nextInt(enemy.atkMax - enemy.atkMin + 1);
       atk = (atk * _diff.atkMul).round(); // むずかしさ
+      if (c != null) atk = (atk * c.enemyAtkMul).round(); // ちょうせん
       if (guardUp) atk = (atk * 0.5).round(); // まもりのマント
+      final drain = c?.hpDrain ?? 0; // じりひん：まいターン へる
       setState(() {
-        playerHp = (playerHp - atk).clamp(0, playerMaxHp);
-        banner = 'てきの こうげき  -$atk';
+        playerHp = (playerHp - atk - drain).clamp(0, playerMaxHp);
+        banner = drain > 0
+            ? 'てきの こうげき  -$atk  ／ じりひん -$drain'
+            : 'てきの こうげき  -$atk';
         bannerColor = kHeart;
         phase = Phase.playerTurn; // すぐ次の印を描ける
       });
       if (playerHp <= 0) {
+        _startDefeat();
+        return;
+      }
+      // ちょうせん：ターン制限を こえたら まけ
+      if (c != null && c.turnLimit > 0 && turns >= c.turnLimit) {
+        setState(() {
+          banner = 'ターンぎれ…';
+          bannerColor = kHeart;
+        });
         _startDefeat();
         return;
       }
@@ -4965,6 +5294,10 @@ class _BattleScreenState extends State<BattleScreen>
                               fontSize: 12)),
                     ),
                   ]),
+                  if (_ch != null) ...[
+                    const SizedBox(height: 6),
+                    _challengeChip(_ch!),
+                  ],
                   const SizedBox(height: 8),
                   SizedBox(width: 220, child: hpBar(enemyHp, enemyMaxHp, kHeart)),
                 ],
@@ -5172,8 +5505,39 @@ class _BattleScreenState extends State<BattleScreen>
     );
   }
 
+  /// ちょうせん中に 条件と のこりターンを出す
+  Widget _challengeChip(Challenge c) {
+    final limited = c.turnLimit > 0;
+    final left = c.turnLimit - turns;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        // 背景が透けて読みにくくならないよう 白と混ぜて不透明にする
+        color: Color.alphaBlend(c.color.withValues(alpha: 0.18), Colors.white),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: c.color, width: 2),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(c.icon, color: c.color, size: 15),
+        const SizedBox(width: 6),
+        Text(c.rule,
+            style: const TextStyle(
+                color: kInk, fontWeight: FontWeight.w800, fontSize: 12)),
+        if (limited) ...[
+          const SizedBox(width: 8),
+          Text('のこり $left',
+              style: TextStyle(
+                  color: left <= 1 ? kHeart : kInkSoft,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12)),
+        ],
+      ]),
+    );
+  }
+
   // 右側に並ぶアイテムボタン（持っているものだけ出る）
   Widget _itemBar() {
+    if (_ch?.noItems ?? false) return const SizedBox.shrink();
     final usable = kShopItems
         .where((it) =>
             it.name != 'しあわせのカギ' && (Player.items[it.name] ?? 0) > 0)
@@ -5421,7 +5785,7 @@ class _BattleScreenState extends State<BattleScreen>
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   const Icon(Icons.star_rounded, color: kStar, size: 26),
                   const SizedBox(width: 8),
-                  Text('+$_reward',
+                  Text('+$_gained',
                       style: const TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 20,
