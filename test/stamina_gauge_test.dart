@@ -67,7 +67,7 @@ void main() {
         findsOneWidget);
     expect(find.descendant(of: gauge, matching: find.text(' / 20')),
         findsOneWidget);
-    expect(find.descendant(of: gauge, matching: find.textContaining('つぎまで')),
+    expect(find.descendant(of: gauge, matching: find.textContaining('つぎのかいふくまで')),
         findsOneWidget);
   });
 
@@ -79,7 +79,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('満タン！'), findsNothing);
-    expect(find.textContaining('つぎまで'), findsNothing);
+    expect(find.textContaining('つぎのかいふくまで'), findsNothing);
     // ゲージは いっぱい
     final f = tester.widget<FractionallySizedBox>(find.descendant(
         of: find.byType(StaminaGauge),
