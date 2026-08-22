@@ -9,6 +9,13 @@ void main() {
     await Player.reset();
   });
 
+  // このゲームはスマホ向け。テストも実機に近い たての画面で見る
+  void usePhone(WidgetTester tester) {
+    tester.view.physicalSize = const Size(375, 812);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+  }
+
   test('先のステージ・むずかしいほど ⭐が増える', () {
     expect(winStars(1, 0), 15);
     expect(winStars(6, 0), 40); // 15 + 5*5
@@ -89,6 +96,7 @@ void main() {
   });
 
   testWidgets('未クリアのステージは すぐバトルに入る', (tester) async {
+    usePhone(tester);
     Player.cleared = 0;
     await tester.pumpWidget(const MaterialApp(home: StageSelectScreen()));
     await tester.pump();
@@ -103,6 +111,7 @@ void main() {
 
   testWidgets('むずかしくすると 敵のHPが増える', (tester) async {
     // 同じステージを ふつう と げきつよ で開いて 敵のHP表示をくらべる
+    usePhone(tester);
     // キーを変えないと State が使い回されて 同じ敵のままになる
     Future<int> maxHpOf(int diff, int seq) async {
       await tester.pumpWidget(MaterialApp(

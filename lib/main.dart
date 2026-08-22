@@ -5103,6 +5103,35 @@ class _BattleScreenState extends State<BattleScreen>
   int get _cost =>
       staminaCost(diff: widget.diff, challenge: widget.challenge);
 
+  // ---- 読みあい ----
+  /// つぎに てきが使ってくる印（予告）
+  Elem nextAtk = Elem.fire;
+
+  /// つぎが 大きいこうげきか
+  bool nextBig = false;
+
+  /// このターン 予告と おなじ印を描いて 受けながしたか
+  bool _guarded = false;
+
+  /// 弱点が入れかわるまでの ターン数
+  static const int weaknessTurns = 3;
+
+  /// てきの つぎの手を決める
+  void _rollNextAttack() {
+    nextAtk = Elem.values[_rng.nextInt(Elem.values.length)];
+    nextBig = _rng.nextInt(4) == 0; // ときどき 大きいのが来る
+  }
+
+  /// 何ターンかごとに 弱点が入れかわる（同じ印を描きつづけられないように）
+  /// 印がしばられている ちょうせんでは 変えない（勝てなくなるため）
+  bool _maybeRotateWeakness() {
+    if (_ch?.onlyElem != null) return false;
+    if (turns == 0 || turns % weaknessTurns != 0) return false;
+    final others = Elem.values.where((e) => e != weakness).toList();
+    weakness = others[_rng.nextInt(others.length)];
+    return true;
+  }
+
   /// このバトルの むずかしさ
   Difficulty get _diff =>
       kDifficulties[widget.diff.clamp(0, kDifficulties.length - 1)];
@@ -5220,6 +5249,8 @@ class _BattleScreenState extends State<BattleScreen>
 
   void _newEnemy() {
     turns = 0;
+    _guarded = false;
+    _rollNextAttack();
     final c = _ch;
     if (c != null) {
       // ちょうせん：毎回おなじ条件で挑めるように 敵もHPも固定する
@@ -5348,6 +5379,9 @@ class _BattleScreenState extends State<BattleScreen>
       return;
     }
 
+    // 予告と おなじ印なら 受けながす（そのぶん 弱点をねらえない）
+    _guarded = elem == nextAtk;
+
     final weaknessMul = elem == weakness ? 2 : 1;
     final accMul = 0.6 + score * 0.8;
     final itemMul = powerUp ? 1.5 : 1.0; // ちからのおまもり
@@ -5401,14 +5435,21 @@ class _BattleScreenState extends State<BattleScreen>
       atk = (atk * _diff.atkMul).round(); // むずかしさ
       if (c != null) atk = (atk * c.enemyAtkMul).round(); // ちょうせん
       if (guardUp) atk = (atk * 0.5).round(); // まもりのマント
+      if (nextBig) atk = (atk * 1.7).round(); // 予告どおり 大きいのが来る
+      if (_guarded) atk = (atk * 0.3).round(); // 同じ印で 受けながした
       final drain = c?.hpDrain ?? 0; // じりひん：まいターン へる
+      var rotated = false;
       setState(() {
         playerHp = (playerHp - atk - drain).clamp(0, playerMaxHp);
-        banner = drain > 0
-            ? 'てきの こうげき  -$atk  ／ じりひん -$drain'
-            : 'てきの こうげき  -$atk';
-        bannerColor = kHeart;
+        final head = _guarded
+            ? 'うけながした！  -$atk'
+            : (nextBig ? 'てきの 大こうげき  -$atk' : 'てきの こうげき  -$atk');
+        banner = drain > 0 ? '$head  ／ じりひん -$drain' : head;
+        bannerColor = _guarded ? kGreen : kHeart;
         phase = Phase.playerTurn; // すぐ次の印を描ける
+        _guarded = false;
+        _rollNextAttack(); // つぎの手を 予告する
+        rotated = _maybeRotateWeakness();
       });
       if (playerHp <= 0) {
         _startDefeat();
@@ -5424,9 +5465,20 @@ class _BattleScreenState extends State<BattleScreen>
         return;
       }
       Future.delayed(const Duration(milliseconds: 450), () {
-        if (mounted && phase == Phase.playerTurn && result == null) {
+        if (!mounted || phase != Phase.playerTurn || result != null) return;
+        if (!rotated) {
           setState(() => banner = '');
+          return;
         }
+        setState(() {
+          banner = 'よわ点が ${elemLabel(weakness)} に かわった！';
+          bannerColor = elemColor(weakness);
+        });
+        Future.delayed(const Duration(milliseconds: 900), () {
+          if (mounted && phase == Phase.playerTurn && result == null) {
+            setState(() => banner = '');
+          }
+        });
       });
     });
   }
@@ -5583,6 +5635,8 @@ class _BattleScreenState extends State<BattleScreen>
                               fontSize: 12)),
                     ),
                   ]),
+                  const SizedBox(height: 6),
+                  _telegraphChip(),
                   if (_ch != null) ...[
                     const SizedBox(height: 6),
                     _challengeChip(_ch!),
@@ -5790,6 +5844,33 @@ class _BattleScreenState extends State<BattleScreen>
           ),
           ),
         ),
+      ]),
+    );
+  }
+
+  /// てきの つぎの手を 予告する
+  /// おなじ印を描けば 受けながせる＝毎ターン「攻める／守る」を えらべる
+  Widget _telegraphChip() {
+    final c = elemColor(nextAtk);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        // 背景が透けて 読みにくくならないよう 白と混ぜて不透明にする
+        color: Color.alphaBlend(
+            c.withValues(alpha: nextBig ? 0.26 : 0.16), Colors.white),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: c, width: nextBig ? 3 : 2),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(nextBig ? Icons.warning_rounded : Icons.schedule_rounded,
+            color: c, size: 15),
+        const SizedBox(width: 6),
+        Text(
+            nextBig
+                ? 'つぎ ${elemLabel(nextAtk)}の 大こうげき'
+                : 'つぎ ${elemLabel(nextAtk)}の こうげき',
+            style: const TextStyle(
+                color: kInk, fontWeight: FontWeight.w800, fontSize: 12)),
       ]),
     );
   }
@@ -6266,6 +6347,8 @@ class _TutorialOverlayState extends State<TutorialOverlay>
     ['ゆびで 印を なぞろう', '画面の下半分に 形を描くと こうげきできるよ'],
     ['3つの印が あるよ', '△ ひ ／ ◯ みず ／ Z かみなり'],
     ['よわ点を ねらおう', 'てきの よわ点の印は ダメージが2ばい！'],
+    ['よわ点は かわる', '3ターンごとに 入れかわるよ。見てから えらぼう'],
+    ['うけながせる', 'てきの「つぎ」と おなじ印を描くと ダメージを へらせる'],
     ['アイテムも つかえる', '印の下のボタンで かいふく や ちからアップ'],
   ];
 
