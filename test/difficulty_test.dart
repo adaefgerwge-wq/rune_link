@@ -90,9 +90,10 @@ void main() {
     expect(find.text('げきつよ'), findsOneWidget);
     // げきつよは まだ開いていない
     expect(find.text('つよいを クリアすると ひらく'), findsOneWidget);
-    // ふつうとつよいには ⭐のボタンが出る
-    expect(find.text('${winStars(1, 0)}'), findsOneWidget);
-    expect(find.text('${winStars(1, 1)}'), findsOneWidget);
+    // ボタンには つかう⚡が出る（もらえる⭐は 説明の行）
+    expect(find.text('${staminaCost(diff: 0)}'), findsOneWidget);
+    expect(find.text('${staminaCost(diff: 1)}'), findsOneWidget);
+    expect(find.textContaining('かつと ⭐${winStars(1, 0)}'), findsOneWidget);
   });
 
   testWidgets('未クリアのステージは すぐバトルに入る', (tester) async {

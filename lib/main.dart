@@ -1478,20 +1478,20 @@ class MenuButton extends StatelessWidget {
 Widget screenHeader({
   String? title,
   Widget? leading,
-  EdgeInsets padding = const EdgeInsets.fromLTRB(14, 8, 10, 4),
+  EdgeInsets padding = const EdgeInsets.fromLTRB(12, 8, 8, 4),
 }) {
   return Padding(
     padding: padding,
     child: Row(children: [
       if (leading != null) ...[leading, const SizedBox(width: 6)],
-      if (title != null) ...[
+      if (title != null)
         Text(title,
             style: const TextStyle(
                 fontSize: 19, fontWeight: FontWeight.w800, color: kInk)),
-        const SizedBox(width: 8),
-      ],
-      const StaminaRow(),
       const Spacer(),
+      // スタミナは 右がわ、トロフィーの となりに置く
+      const StaminaRow(),
+      const SizedBox(width: 6),
       statCounters(),
     ]),
   );
@@ -1536,9 +1536,9 @@ class _StaminaRowState extends State<StaminaRow> {
               color: now > 0 ? kInk : kHeart,
               fontWeight: FontWeight.w800,
               fontSize: 15)),
-      const SizedBox(width: 6),
+      const SizedBox(width: 4),
       // 幅を のばさず 固定にする＝見出しの長さに関係なく 同じ見え方になる
-      const SizedBox(width: 22, child: StaminaBar(height: 7)),
+      const SizedBox(width: 44, child: StaminaBar(height: 7)),
       // 満タンのときは 出さない（ゲージの色で わかる）
       if (!full) ...[
         const SizedBox(width: 8),
@@ -1564,11 +1564,11 @@ class _StatCountersRow extends StatelessWidget {
     Widget counter(IconData i, String t, Color c) => Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(i, color: c, size: 15),
+            Icon(i, color: c, size: 13),
             const SizedBox(width: 1),
             Text(t,
                 style: const TextStyle(
-                    color: kInk, fontWeight: FontWeight.w800, fontSize: 11)),
+                    color: kInk, fontWeight: FontWeight.w800, fontSize: 10)),
           ],
         );
     return Row(mainAxisSize: MainAxisSize.min, children: [
@@ -1591,9 +1591,9 @@ Widget statTopBar({VoidCallback? onToggleBgm, Widget? leading}) {
     padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
     child: Row(children: [
       leading ?? const Icon(Icons.menu, color: kInk, size: 26),
-      const SizedBox(width: 10),
-      const StaminaRow(),
       const Spacer(),
+      const StaminaRow(),
+      const SizedBox(width: 8),
       counter(Icons.emoji_events, shortNum(Player.trophies), kGold),
       const SizedBox(width: 8),
       counter(Icons.star_rounded, shortNum(Player.stars), kStar),
@@ -2692,7 +2692,7 @@ class SubScreen extends StatelessWidget {
               // もどれる画面は もどる、下タブの画面は 三本線
               leading: showBack
                   ? SizedBox(
-                      width: 28,
+                      width: 26,
                       child: IconButton(
                         padding: EdgeInsets.zero,
                         icon:
@@ -4387,10 +4387,6 @@ class _StageSelectScreenState extends State<StageSelectScreen> {
                           fontSize: 15,
                           color: open ? kInk : kInkSoft)),
                 ),
-                if (open) ...[
-                  const SizedBox(width: 6),
-                  staminaBadge(staminaCost(diff: d)),
-                ],
                 if (done) ...[
                   const SizedBox(width: 6),
                   const Icon(Icons.check_circle_rounded,
@@ -4400,7 +4396,7 @@ class _StageSelectScreenState extends State<StageSelectScreen> {
               const SizedBox(height: 2),
               Text(
                   open
-                      ? 'てきのHP ${def.hpMul}ばい ／ こうげき ${def.atkMul}ばい'
+                      ? 'てきのHP ${def.hpMul}ばい ／ かつと ⭐${winStars(stage, d)}'
                       : '${kDifficulties[d - 1].label}を クリアすると ひらく',
                   style: const TextStyle(fontSize: 11, color: kInkSoft)),
             ],
@@ -4416,13 +4412,13 @@ class _StageSelectScreenState extends State<StageSelectScreen> {
             color: kGreen,
             edge: kGreenDeep,
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.star_rounded, color: Colors.white, size: 15),
-              const SizedBox(width: 3),
-              Text('${winStars(stage, d)}',
+              const Icon(Icons.bolt_rounded, color: Colors.white, size: 16),
+              const SizedBox(width: 2),
+              Text('${staminaCost(diff: d)}',
                   style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w800,
-                      fontSize: 14)),
+                      fontSize: 15)),
             ]),
           ),
       ]),
