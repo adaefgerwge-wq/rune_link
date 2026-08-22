@@ -809,6 +809,18 @@ Color elemColor(Elem e) {
   }
 }
 
+/// その印の 形（△◯Z）。凡例と 判定表示で 同じ記号を使う
+String elemShape(Elem e) {
+  switch (e) {
+    case Elem.water:
+      return '◯';
+    case Elem.fire:
+      return '△';
+    case Elem.thunder:
+      return 'Z';
+  }
+}
+
 String elemLabel(Elem e) {
   switch (e) {
     case Elem.water:
@@ -5048,6 +5060,40 @@ class RuneRecognizer {
 }
 
 // ======================= バトル画面 =======================
+/// 描いた印が どう判定されたかの 記録
+/// 「何と読まれたか」「なぜ その威力か」を 画面に出すために使う
+class HitInfo {
+  /// よみとれた印（null なら よみとれなかった）
+  final Elem? elem;
+
+  /// よみとれなかったとき いちばん近かった印
+  final Elem? closest;
+
+  /// どれくらい きれいに描けたか（0〜1）
+  final double score;
+
+  final int dmg;
+  final bool weak; // 弱点だった＝2ばい
+  final bool guarded; // 予告と おなじ＝うけの かまえ
+  final bool crit; // とくに きれいに描けた
+
+  /// ちょうせんの しばりで はじかれたときの 理由
+  final String? reject;
+
+  const HitInfo({
+    this.elem,
+    this.closest,
+    this.score = 0,
+    this.dmg = 0,
+    this.weak = false,
+    this.guarded = false,
+    this.crit = false,
+    this.reject,
+  });
+
+  bool get ok => elem != null && reject == null;
+}
+
 enum Phase { playerTurn, resolving }
 
 class BattleScreen extends StatefulWidget {
@@ -5112,6 +5158,12 @@ class _BattleScreenState extends State<BattleScreen>
 
   /// このターン 予告と おなじ印を描いて 受けながしたか
   bool _guarded = false;
+
+  /// 直前に描いた印が どう判定されたか（描画エリアに出す）
+  /// つぎを描きはじめるまで 消えない＝じっくり見られる
+  HitInfo? hit;
+
+  void _showHit(HitInfo info) => setState(() => hit = info);
 
   /// 弱点が入れかわるまでの ターン数
   static const int weaknessTurns = 3;
@@ -5250,6 +5302,7 @@ class _BattleScreenState extends State<BattleScreen>
   void _newEnemy() {
     turns = 0;
     _guarded = false;
+    hit = null;
     _rollNextAttack();
     final c = _ch;
     if (c != null) {
@@ -5325,6 +5378,8 @@ class _BattleScreenState extends State<BattleScreen>
   }
 
   void _onStart(Offset p) {
+    // つぎを描きはじめたら 前の判定は 引っこめる
+    if (hit != null) setState(() => hit = null);
     if (_loading || _showTutorial || phase != Phase.playerTurn || result != null) return;
     setState(() {
       stroke = [p];
@@ -5349,33 +5404,19 @@ class _BattleScreenState extends State<BattleScreen>
     final score = res.value;
 
     // 認識失敗：罰なし・すぐ描き直せる
+    // 何が近かったかを 出す（出さないと どう直せばいいか わからない）
     if (elem == null || score < minScore) {
-      setState(() {
-        banner = 'えっ？';
-        bannerColor = kInkSoft;
-        stroke = [];
-      });
-      Future.delayed(const Duration(milliseconds: 450), () {
-        if (mounted && phase == Phase.playerTurn && result == null) {
-          setState(() => banner = '');
-        }
-      });
+      setState(() => stroke = []);
+      _showHit(HitInfo(closest: elem, score: score));
       return;
     }
 
     // ちょうせん：つかえる印がしばられていることがある
     final only = _ch?.onlyElem;
     if (only != null && elem != only) {
-      setState(() {
-        banner = '${elemLabel(only)} の印だけ！';
-        bannerColor = kHeart;
-        stroke = [];
-      });
-      Future.delayed(const Duration(milliseconds: 700), () {
-        if (mounted && phase == Phase.playerTurn && result == null) {
-          setState(() => banner = '');
-        }
-      });
+      setState(() => stroke = []);
+      _showHit(HitInfo(
+          elem: elem, score: score, reject: '${elemLabel(only)} の印だけ！'));
       return;
     }
 
@@ -5390,14 +5431,21 @@ class _BattleScreenState extends State<BattleScreen>
     Player.recordElem(elem, crit: crit); // 統計：どの印をよく使うか
 
     // 攻撃 → 即ダメージ・シェイク・音
+    // 数字は 判定カードのほうに出すので バナーは 敵の反撃用にあけておく
     setState(() {
       phase = Phase.resolving;
       stroke = [];
       turns += 1;
       enemyHp = (enemyHp - dmg).clamp(0, enemyMaxHp);
-      banner = crit ? 'キレイ！ $dmg' : '$dmg';
-      bannerColor = elemColor(elem);
     });
+    _showHit(HitInfo(
+      elem: elem,
+      score: score,
+      dmg: dmg,
+      weak: weaknessMul == 2,
+      guarded: _guarded,
+      crit: crit,
+    ));
     _shake.forward(from: 0);
     Sfx.play('hit.wav');
 
@@ -5994,18 +6042,113 @@ class _BattleScreenState extends State<BattleScreen>
                 child: child,
               ),
               child: Center(
-                child: stroke.isEmpty && banner.isEmpty
-                    ? const Text('ここに印を描く',
-                        style: TextStyle(
-                            color: Color(0xFFCFCFD8),
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700))
-                    : const SizedBox.expand(),
+                child: stroke.isNotEmpty
+                    ? const SizedBox.expand()
+                    : hit != null
+                        ? _hitCard(hit!)
+                        : banner.isEmpty
+                            ? const Text('ここに印を描く',
+                                style: TextStyle(
+                                    color: Color(0xFFCFCFD8),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700))
+                            : const SizedBox.expand(),
               ),
             ),
           ),
         ),
       ]),
+    );
+  }
+
+  /// 「いま描いた印が どう判定されたか」を出すカード
+  /// 何と読まれたか・きれいさ・なぜ その威力か を いっぺんに見せる
+  Widget _hitCard(HitInfo h) {
+    final shown = h.elem ?? h.closest;
+    final c = shown == null ? kInkSoft : elemColor(shown);
+    final pct = (h.score * 100).round();
+
+    Widget badge(String text, Color bg) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+          decoration: BoxDecoration(
+            // 背景が透けて 読みにくくならないよう 白と混ぜて不透明にする
+            color: Color.alphaBlend(bg.withValues(alpha: 0.20), Colors.white),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: bg, width: 1.5),
+          ),
+          child: Text(text,
+              style: const TextStyle(
+                  color: kInk, fontWeight: FontWeight.w800, fontSize: 12)),
+        );
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutBack,
+      builder: (_, t, child) => Transform.scale(
+          scale: 0.85 + 0.15 * t.clamp(0.0, 1.0), child: child),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 24),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: c, width: 2.5),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.10),
+                blurRadius: 16,
+                offset: const Offset(0, 6)),
+          ],
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            // 何の印と 読まれたか（凡例と おなじ記号）
+            Text(shown == null ? '？' : elemShape(shown),
+                style: TextStyle(
+                    color: c, fontWeight: FontWeight.w800, fontSize: 30)),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                    h.ok
+                        ? elemLabel(shown!)
+                        : (h.reject != null
+                            ? '${elemLabel(shown!)} と よまれた'
+                            : 'よみとれなかった'),
+                    style: const TextStyle(
+                        color: kInk,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16)),
+                Text(
+                    h.ok
+                        ? 'きれいさ $pct%'
+                        : (h.reject ?? 'もうすこし ゆっくり 大きく'),
+                    style: const TextStyle(
+                        color: kInkSoft,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11)),
+              ],
+            ),
+            if (h.ok) ...[
+              const SizedBox(width: 14),
+              Text('${h.dmg}',
+                  style: TextStyle(
+                      color: c, fontWeight: FontWeight.w800, fontSize: 30)),
+            ],
+          ]),
+          if (h.ok && (h.weak || h.guarded || h.crit)) ...[
+            const SizedBox(height: 8),
+            Wrap(spacing: 6, runSpacing: 6, children: [
+              if (h.weak) badge('弱点 ×2', kHeart),
+              if (h.guarded) badge('うけの かまえ', kGreen),
+              if (h.crit) badge('キレイ！', kGold),
+            ]),
+          ],
+        ]),
+      ),
     );
   }
 
