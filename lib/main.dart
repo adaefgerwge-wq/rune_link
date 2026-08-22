@@ -1230,6 +1230,141 @@ class _BgmButtonState extends State<BgmButton> {
 }
 
 /// 右上に並ぶ トロフィー・スター・音 の3つ
+/// 秒を「4:21」の形にする
+String mmss(int sec) {
+  final m = sec ~/ 60;
+  final s = sec % 60;
+  return '$m:${s.toString().padLeft(2, '0')}';
+}
+
+/// スタミナのゲージ（どこでも使えるように 大きさを外から決める）
+/// 0になったら 赤にして ひと目で気づけるようにする
+class StaminaBar extends StatelessWidget {
+  final double height;
+  final bool showSegments;
+  const StaminaBar({super.key, this.height = 6, this.showSegments = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final now = Player.stamina;
+    final ratio = (now / Player.maxStamina).clamp(0.0, 1.0);
+    final full = now >= Player.maxStamina;
+    final color = now == 0
+        ? kHeart
+        : full
+            ? kGreen
+            : kStar;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(999),
+      child: SizedBox(
+        height: height,
+        child: Stack(children: [
+          Container(color: const Color(0xFFE6E6EE)),
+          // 減るときも 増えるときも すっと動く
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: ratio, end: ratio),
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOut,
+            builder: (context, v, child) => FractionallySizedBox(
+              widthFactor: v,
+              child: Container(color: color),
+            ),
+          ),
+          // バトル1回ぶん(⚡1)の 目もり
+          if (showSegments)
+            Row(
+              children: List.generate(
+                Player.maxStamina,
+                (i) => Expanded(
+                  child: Container(
+                    margin: EdgeInsets.only(
+                        right: i == Player.maxStamina - 1 ? 0 : 1),
+                    color: Colors.transparent,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Container(
+                          width: 1,
+                          color: i == Player.maxStamina - 1
+                              ? Colors.transparent
+                              : Colors.white.withValues(alpha: 0.55)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ]),
+      ),
+    );
+  }
+}
+
+/// ホームに出す 大きめのスタミナゲージ
+/// あと何回 遊べるか・つぎの回復まで あと何分かが ひと目でわかる
+class StaminaGauge extends StatefulWidget {
+  const StaminaGauge({super.key});
+  @override
+  State<StaminaGauge> createState() => _StaminaGaugeState();
+}
+
+class _StaminaGaugeState extends State<StaminaGauge> {
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    // 満タンでないときだけ 1秒ごとに 見なおす
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      if (Player.stamina < Player.maxStamina) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = Player.stamina;
+    final full = now >= Player.maxStamina;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6F6FB),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(children: [
+        Row(children: [
+          Icon(Icons.bolt_rounded, color: now > 0 ? kStar : kHeart, size: 22),
+          const SizedBox(width: 4),
+          Text('$now',
+              style: TextStyle(
+                  color: now > 0 ? kInk : kHeart,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 20)),
+          Text(' / ${Player.maxStamina}',
+              style: const TextStyle(
+                  color: kInkSoft, fontWeight: FontWeight.w800, fontSize: 13)),
+          const Spacer(),
+          Text(
+              full
+                  ? '満タン！'
+                  : 'つぎまで ${mmss(Player.secondsToNextStamina)}',
+              style: TextStyle(
+                  color: full ? kGreen : kInkSoft,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12)),
+        ]),
+        const SizedBox(height: 8),
+        // 目もり付き＝バトル何回ぶん のこっているかが 数えられる
+        const StaminaBar(height: 12, showSegments: true),
+      ]),
+    );
+  }
+}
+
 /// スタミナの表示。回復までの のこり時間も出す
 class StaminaCounter extends StatefulWidget {
   final double size;
@@ -1257,33 +1392,40 @@ class _StaminaCounterState extends State<StaminaCounter> {
     super.dispose();
   }
 
-  static String mmss(int sec) {
-    final m = sec ~/ 60;
-    final s = sec % 60;
-    return '$m:${s.toString().padLeft(2, '0')}';
-  }
-
   @override
   Widget build(BuildContext context) {
     final now = Player.stamina;
     final full = now >= Player.maxStamina;
+    // 数字の下に ゲージを敷く＝よこ幅を増やさずに 見た目でも わかるようにする
     return Row(mainAxisSize: MainAxisSize.min, children: [
       Icon(Icons.bolt_rounded,
           color: now > 0 ? kStar : kInkSoft, size: widget.size),
       const SizedBox(width: 3),
-      Text('$now',
-          style: TextStyle(
-              color: now > 0 ? kInk : kHeart,
-              fontWeight: FontWeight.w800,
-              fontSize: widget.size * 0.68)),
-      if (!full) ...[
-        const SizedBox(width: 4),
-        Text(mmss(Player.secondsToNextStamina),
-            style: TextStyle(
-                color: kInkSoft,
-                fontWeight: FontWeight.w700,
-                fontSize: widget.size * 0.5)),
-      ],
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Text('$now',
+                style: TextStyle(
+                    color: now > 0 ? kInk : kHeart,
+                    fontWeight: FontWeight.w800,
+                    fontSize: widget.size * 0.68)),
+            if (!full) ...[
+              const SizedBox(width: 4),
+              Text(mmss(Player.secondsToNextStamina),
+                  style: TextStyle(
+                      color: kInkSoft,
+                      fontWeight: FontWeight.w700,
+                      fontSize: widget.size * 0.5)),
+            ],
+          ]),
+          const SizedBox(height: 2),
+          SizedBox(
+              width: widget.size * 2.2,
+              child: StaminaBar(height: widget.size * 0.2)),
+        ],
+      ),
     ]);
   }
 }
@@ -2092,7 +2234,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ]),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
+        const StaminaGauge(),
+        const SizedBox(height: 12),
         chunkyButton(
           label: 'バトル スタート',
           color: kGreen,
@@ -4162,7 +4306,7 @@ class _StageSelectScreenState extends State<StageSelectScreen> {
               style: const TextStyle(
                   fontWeight: FontWeight.w800, fontSize: 17, color: kInk)),
           const SizedBox(height: 4),
-          const Text('むずかしいほど ⭐がたくさん もらえる（⚡も おおく つかう）',
+          const Text('むずかしいほど ⭐が多い。⚡も 多くつかう',
               style: TextStyle(fontSize: 12, color: kInkSoft)),
           const SizedBox(height: 14),
             for (var d = 0; d < kDifficulties.length; d++)
