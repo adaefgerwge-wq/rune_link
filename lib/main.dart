@@ -1325,78 +1325,18 @@ class _StaminaGaugeState extends State<StaminaGauge> {
               style: const TextStyle(
                   color: kInkSoft, fontWeight: FontWeight.w800, fontSize: 13)),
           const Spacer(),
-          Text(
-              full
-                  ? '満タン！'
-                  : 'つぎまで ${mmss(Player.secondsToNextStamina)}',
-              style: TextStyle(
-                  color: full ? kGreen : kInkSoft,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12)),
+          // 満タンのときは 文字を出さない（ゲージの色が緑になるので わかる）
+          if (!full)
+            Text('つぎまで ${mmss(Player.secondsToNextStamina)}',
+                style: const TextStyle(
+                    color: kInkSoft,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12)),
         ]),
         const SizedBox(height: 7),
         const StaminaBar(height: 8),
       ]),
     );
-  }
-}
-
-/// スタミナの表示。回復までの のこり時間も出す
-class StaminaCounter extends StatefulWidget {
-  final double size;
-  const StaminaCounter({super.key, this.size = 22});
-  @override
-  State<StaminaCounter> createState() => _StaminaCounterState();
-}
-
-class _StaminaCounterState extends State<StaminaCounter> {
-  Timer? _tick;
-
-  @override
-  void initState() {
-    super.initState();
-    // 満タンでないときだけ 1秒ごとに 数字を見なおす
-    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      if (Player.stamina < Player.maxStamina) setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _tick?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final now = Player.stamina;
-    final full = now >= Player.maxStamina;
-    // 数字の下に ゲージを敷く。
-    // のこり時間は 出さない（ホームのゲージに あるので 重複するうえ、
-    // ヘッダーの幅を食って 見出しや 他のカウンターを 押しつぶしていた）
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(Icons.bolt_rounded,
-          color: now > 0 ? kStar : kInkSoft, size: widget.size),
-      const SizedBox(width: 3),
-      Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('$now',
-              style: TextStyle(
-                  color: now > 0
-                      ? (full ? kInk : kStar)
-                      : kHeart,
-                  fontWeight: FontWeight.w800,
-                  fontSize: widget.size * 0.68)),
-          const SizedBox(height: 2),
-          SizedBox(
-              width: widget.size * 1.35,
-              child: StaminaBar(height: widget.size * 0.18)),
-        ],
-      ),
-    ]);
   }
 }
 
@@ -1479,13 +1419,112 @@ String shortNum(int n) {
   return '${n ~/ 1000}k';
 }
 
-/// ヘッダーに置く ⚡🏆⭐。
-/// 375px に 見出しと いっしょに収まるよう 幅の上限を持たせている。
-/// 上限を ここで持つことで どの画面でも 同じ大きさで出る。
-/// ヘッダーに置く ⚡🏆⭐。
-/// いちばん狭い画面でも そのまま収まる大きさにしてある。
-/// FittedBox で縮めると 画面ごとに のこり幅・高さが ちがうぶん
-/// 縮みかたが変わって 大きさが そろわなくなるので 縮めない。
+/// メニューを開く 三本線。ホームだけでなく どの画面にも置く
+class MenuButton extends StatelessWidget {
+  const MenuButton({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => Scaffold.of(context).openDrawer(),
+      child: const Padding(
+        padding: EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+        child: Icon(Icons.menu, color: kInk, size: 26),
+      ),
+    );
+  }
+}
+
+/// 画面いちばん上の 共通ヘッダー。
+/// 1行目：三本線／もどる ＋ 見出し ＋ 🏆⭐🔊
+/// 2行目：スタミナ。1行目に入れると せまくて 小さくなるので 分けている。
+///        分けたぶん 数字もゲージも大きくでき、のこり時間も出せる。
+Widget screenHeader({
+  required String title,
+  Widget? leading,
+  EdgeInsets padding = const EdgeInsets.fromLTRB(16, 8, 14, 4),
+}) {
+  return Padding(
+    padding: padding,
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Row(children: [
+        if (leading != null) ...[leading, const SizedBox(width: 8)],
+        Text(title,
+            style: const TextStyle(
+                fontSize: 19, fontWeight: FontWeight.w800, color: kInk)),
+        const Spacer(),
+        statCounters(),
+      ]),
+      const SizedBox(height: 5),
+      const StaminaRow(),
+    ]),
+  );
+}
+
+/// ヘッダー2行目のスタミナ。よこ幅に余裕があるので
+/// 数字もゲージも大きく、のこり時間も出せる
+class StaminaRow extends StatefulWidget {
+  const StaminaRow({super.key});
+  @override
+  State<StaminaRow> createState() => _StaminaRowState();
+}
+
+class _StaminaRowState extends State<StaminaRow> {
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      if (Player.stamina < Player.maxStamina) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = Player.stamina;
+    final full = now >= Player.maxStamina;
+    return Row(children: [
+      Icon(Icons.bolt_rounded, color: now > 0 ? kStar : kHeart, size: 20),
+      const SizedBox(width: 3),
+      Text('$now',
+          style: TextStyle(
+              color: now > 0 ? kInk : kHeart,
+              fontWeight: FontWeight.w800,
+              fontSize: 16)),
+      Text(' / ${Player.maxStamina}',
+          style: const TextStyle(
+              color: kInkSoft, fontWeight: FontWeight.w800, fontSize: 11)),
+      const SizedBox(width: 8),
+      const Expanded(child: StaminaBar(height: 8)),
+      // 満タンのときは 出さない（ゲージの色で わかる）
+      if (!full) ...[
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 40,
+          child: Text(mmss(Player.secondsToNextStamina),
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                  color: kInkSoft,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12)),
+        ),
+      ],
+    ]);
+  }
+}
+
+/// ヘッダーに置く 🏆⭐🔊。
+/// スタミナは 2行目に分けたので ここには入れない。
+/// いちばん狭い画面でも そのまま収まる大きさにしてある
+/// （FittedBox で縮めると 画面ごとに 縮みかたが変わって そろわない）。
 Widget statCounters() => const _StatCountersRow();
 
 class _StatCountersRow extends StatelessWidget {
@@ -1504,8 +1543,6 @@ class _StatCountersRow extends StatelessWidget {
           ],
         );
     return Row(mainAxisSize: MainAxisSize.min, children: [
-      const StaminaCounter(size: 17),
-      const SizedBox(width: 5),
       counter(Icons.emoji_events, shortNum(Player.trophies), kGold),
       const SizedBox(width: 5),
       counter(Icons.star_rounded, shortNum(Player.stars), kStar),
@@ -1525,11 +1562,10 @@ Widget statTopBar({VoidCallback? onToggleBgm, Widget? leading}) {
       ]);
   return Padding(
     padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
-    child: Row(children: [
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Row(children: [
       leading ?? const Icon(Icons.menu, color: kInk, size: 26),
       const Spacer(),
-      const StaminaCounter(size: 24),
-      const SizedBox(width: 12),
       counter(Icons.emoji_events, shortNum(Player.trophies), kGold),
       const SizedBox(width: 12),
       counter(Icons.star_rounded, shortNum(Player.stars), kStar),
@@ -1540,6 +1576,9 @@ Widget statTopBar({VoidCallback? onToggleBgm, Widget? leading}) {
         child: Icon(Bgm.on ? Icons.volume_up_rounded : Icons.volume_off_rounded,
             color: Bgm.on ? kGold : kInkSoft, size: 24),
       ),
+      ]),
+      const SizedBox(height: 5),
+      const StaminaRow(),
     ]),
   );
 }
@@ -2316,26 +2355,7 @@ class _HomeScreenState extends State<HomeScreen> {
         SafeArea(
         child: Column(children: [
           // ユーザー名の行
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: Row(children: [
-              // 三本線でメニューを開く
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => Scaffold.of(context).openDrawer(),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 6, horizontal: 2),
-                  child: Icon(Icons.menu, color: kInk, size: 26),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(Player.name,
-                  style: const TextStyle(
-                      fontSize: 17, fontWeight: FontWeight.w800, color: kInk)),
-              const Spacer(),
-              statCounters(),
-            ]),
-          ),
+          screenHeader(title: Player.name, leading: const MenuButton()),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
@@ -2627,27 +2647,22 @@ class SubScreen extends StatelessWidget {
         const Positioned.fill(child: AnimatedBackground()),
         SafeArea(
           child: Column(children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(showBack ? 4 : 20, 8, 10, 4),
-              child: Row(children: [
-                if (showBack)
-                  SizedBox(
-                    width: 40,
-                    child: IconButton(
-                      padding: EdgeInsets.zero,
-                      icon: const Icon(Icons.arrow_back_rounded, color: kInk),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ),
-                Text(title,
-                    style: const TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w800,
-                        color: kInk)),
-                const SizedBox(width: 6),
-                const Spacer(),
-                statCounters(),
-              ]),
+            screenHeader(
+              title: title,
+              // もどれる画面は もどる、下タブの画面は 三本線
+              leading: showBack
+                  ? SizedBox(
+                      width: 34,
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        icon:
+                            const Icon(Icons.arrow_back_rounded, color: kInk),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    )
+                  : const MenuButton(),
+              padding: EdgeInsets.fromLTRB(showBack ? 8 : 16, 8, 14, 4)
+                  .copyWith(left: showBack ? 8 : 16),
             ),
             Expanded(
               child: ListView(
@@ -4547,18 +4562,7 @@ class _StageSelectScreenState extends State<StageSelectScreen> {
       const Positioned.fill(child: AnimatedBackground()),
       SafeArea(
         child: Column(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
-            child: Row(children: [
-              const Text('ぼうけん',
-                  style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: kInk)),
-              const Spacer(),
-              statCounters(),
-            ]),
-          ),
+          screenHeader(title: 'ぼうけん', leading: const MenuButton()),
           // ぜんたいの進み具合
           Container(
             margin: const EdgeInsets.fromLTRB(20, 4, 20, 10),
@@ -4655,18 +4659,7 @@ class LeagueScreen extends StatelessWidget {
         const Positioned.fill(child: AnimatedBackground()),
         SafeArea(
           child: Column(children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
-              child: Row(children: [
-                const Text('リーグ',
-                    style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: kInk)),
-                const Spacer(),
-                statCounters(),
-              ]),
-            ),
+            screenHeader(title: 'リーグ', leading: const MenuButton()),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 6, 16, 20),
@@ -4856,18 +4849,7 @@ class PremiumScreen extends StatelessWidget {
         const Positioned.fill(child: AnimatedBackground()),
         SafeArea(
           child: Column(children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
-              child: Row(children: [
-                const Text('プレミアム',
-                    style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: kInk)),
-                const Spacer(),
-                statCounters(),
-              ]),
-            ),
+            screenHeader(title: 'プレミアム', leading: const MenuButton()),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 6, 16, 20),

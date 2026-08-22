@@ -106,20 +106,23 @@ void main() {
     expect(find.textContaining('つかいきった'), findsOneWidget);
   });
 
-  testWidgets('ヘッダーは 数とゲージだけ（時間は 出さない）', (tester) async {
+  testWidgets('ヘッダーのスタミナ行に 数・ゲージ・のこり時間が 出る',
+      (tester) async {
     usePhone(tester);
     await tester.pumpWidget(const MaterialApp(
-        home: Scaffold(body: Center(child: StaminaCounter()))));
+        home: Scaffold(body: StaminaRow())));
     await tester.pump();
+
+    // 満タンのときは 時間を出さない（ゲージの色で わかる）
     expect(find.text('20'), findsOneWidget);
+    expect(find.text(' / 20'), findsOneWidget);
     expect(find.byType(StaminaBar), findsOneWidget);
-    // のこり時間は ホームのゲージに出す。ヘッダーに置くと
-    // 幅を食って 見出しや 他のカウンターを 押しつぶしていた
     expect(find.textContaining(':'), findsNothing);
 
+    // へらすと 数がかわり、のこり時間が 出る
     Player.spendStamina(1);
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('19'), findsOneWidget);
-    expect(find.textContaining(':'), findsNothing);
+    expect(find.textContaining(':'), findsOneWidget);
   });
 }

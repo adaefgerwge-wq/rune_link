@@ -60,21 +60,31 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.byType(StaminaGauge), findsOneWidget);
-    expect(find.text('17'), findsWidgets);
-    expect(find.text(' / 20'), findsOneWidget);
-    expect(find.textContaining('つぎまで'), findsOneWidget);
+    final gauge = find.byType(StaminaGauge);
+    expect(gauge, findsOneWidget);
+    // ヘッダーにも スタミナ行が出るので ホームのゲージの中だけを見る
+    expect(find.descendant(of: gauge, matching: find.text('17')),
+        findsOneWidget);
+    expect(find.descendant(of: gauge, matching: find.text(' / 20')),
+        findsOneWidget);
+    expect(find.descendant(of: gauge, matching: find.textContaining('つぎまで')),
+        findsOneWidget);
   });
 
-  testWidgets('満タンのときは 満タン！と 出る', (tester) async {
+  testWidgets('満タンのときは 文字を出さない（色でわかる）', (tester) async {
     usePhone(tester, height: 2400);
     await tester.pumpWidget(
         const MaterialApp(home: Scaffold(body: HomeScreen())));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('満タン！'), findsOneWidget);
+    expect(find.text('満タン！'), findsNothing);
     expect(find.textContaining('つぎまで'), findsNothing);
+    // ゲージは いっぱい
+    final f = tester.widget<FractionallySizedBox>(find.descendant(
+        of: find.byType(StaminaGauge),
+        matching: find.byType(FractionallySizedBox)));
+    expect(f.widthFactor, 1.0);
   });
 
   testWidgets('ヘッダーの表示は ゲージを足しても よこ幅が ふえていない',
