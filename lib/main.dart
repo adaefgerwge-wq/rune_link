@@ -20,6 +20,7 @@ const kGreen = Color(0xFF7CC043);
 const kGreenDeep = Color(0xFF63A230);
 const kGold = Color(0xFFF5B920);
 const kStar = Color(0xFF3FA9F5);
+const kStarDeep = Color(0xFF2B87CC); // ⭐⚡のボタンの ふち
 const kHeart = Color(0xFFFF6B6B);
 const kStroke = Color(0xFF5A5A66);
 
@@ -4340,8 +4341,21 @@ class _StageSelectScreenState extends State<StageSelectScreen> {
               style: const TextStyle(
                   fontWeight: FontWeight.w800, fontSize: 17, color: kInk)),
           const SizedBox(height: 4),
-          const Text('むずかしいほど ⭐が多い。⚡も 多くつかう',
-              style: TextStyle(fontSize: 12, color: kInkSoft)),
+          // 絵文字のままだと 色を変えられないので アイコンで置く
+          const Text.rich(
+            TextSpan(children: [
+              TextSpan(text: 'むずかしいほど '),
+              WidgetSpan(
+                  alignment: PlaceholderAlignment.middle,
+                  child: Icon(Icons.star_rounded, color: kStar, size: 14)),
+              TextSpan(text: 'が多い。'),
+              WidgetSpan(
+                  alignment: PlaceholderAlignment.middle,
+                  child: Icon(Icons.bolt_rounded, color: kStar, size: 14)),
+              TextSpan(text: 'も 多くつかう'),
+            ]),
+            style: TextStyle(fontSize: 12, color: kInkSoft),
+          ),
           const SizedBox(height: 14),
             for (var d = 0; d < kDifficulties.length; d++)
               _diffRow(sheetCtx, stage, d),
@@ -4394,11 +4408,21 @@ class _StageSelectScreenState extends State<StageSelectScreen> {
                 ],
               ]),
               const SizedBox(height: 2),
-              Text(
-                  open
-                      ? 'てきのHP ${def.hpMul}ばい ／ かつと ⭐${winStars(stage, d)}'
-                      : '${kDifficulties[d - 1].label}を クリアすると ひらく',
-                  style: const TextStyle(fontSize: 11, color: kInkSoft)),
+              open
+                  ? Text.rich(
+                      TextSpan(children: [
+                        TextSpan(
+                            text: 'てきのHP ${def.hpMul}ばい ／ かつと '),
+                        const WidgetSpan(
+                            alignment: PlaceholderAlignment.middle,
+                            child: Icon(Icons.star_rounded,
+                                color: kStar, size: 13)),
+                        TextSpan(text: '${winStars(stage, d)}'),
+                      ]),
+                      style: const TextStyle(fontSize: 11, color: kInkSoft),
+                    )
+                  : Text('${kDifficulties[d - 1].label}を クリアすると ひらく',
+                      style: const TextStyle(fontSize: 11, color: kInkSoft)),
             ],
           ),
         ),
@@ -4409,8 +4433,9 @@ class _StageSelectScreenState extends State<StageSelectScreen> {
               Navigator.of(sheetCtx).pop();
               _go(stage, d);
             },
-            color: kGreen,
-            edge: kGreenDeep,
+            // 上のバーの⚡と 同じ青にそろえる
+            color: kStar,
+            edge: kStarDeep,
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.bolt_rounded, color: Colors.white, size: 16),
               const SizedBox(width: 2),

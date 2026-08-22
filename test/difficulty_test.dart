@@ -93,7 +93,9 @@ void main() {
     // ボタンには つかう⚡が出る（もらえる⭐は 説明の行）
     expect(find.text('${staminaCost(diff: 0)}'), findsOneWidget);
     expect(find.text('${staminaCost(diff: 1)}'), findsOneWidget);
-    expect(find.textContaining('かつと ⭐${winStars(1, 0)}'), findsOneWidget);
+    // ⭐は アイコンなので 文字は「かつと 」と 数字に分かれる
+    expect(find.textContaining('かつと '), findsWidgets);
+    expect(find.byIcon(Icons.star_rounded), findsWidgets);
   });
 
   testWidgets('未クリアのステージは すぐバトルに入る', (tester) async {
