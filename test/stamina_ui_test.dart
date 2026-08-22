@@ -110,7 +110,7 @@ void main() {
       (tester) async {
     usePhone(tester);
     await tester.pumpWidget(const MaterialApp(
-        home: Scaffold(body: Center(child: StaminaMini()))));
+        home: Scaffold(body: Center(child: StaminaRow()))));
     await tester.pump();
 
     // 満タンのときは 時間を出さない（ゲージの色で わかる）

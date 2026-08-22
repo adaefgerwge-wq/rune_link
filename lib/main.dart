@@ -1471,36 +1471,42 @@ class MenuButton extends StatelessWidget {
 }
 
 /// 画面いちばん上の 共通ヘッダー。
-/// 三本線／もどる ＋ 見出し ＋ ⚡スタミナ ＋ 🏆⭐🔊 を 1行に並べる。
+/// 1行目：三本線／もどる ＋ 見出し ＋ 🏆⭐🔊
+/// 2行目：⚡スタミナ（独立した行）。
+/// スタミナを 1行目に混ぜると せまくて カウンターと同じ大きさまで
+/// 縮めるはめになるので、行を分けて 独立した大きさで出す。
 Widget screenHeader({
   required String title,
   Widget? leading,
-  EdgeInsets padding = const EdgeInsets.fromLTRB(16, 8, 12, 4),
+  EdgeInsets padding = const EdgeInsets.fromLTRB(16, 8, 14, 4),
 }) {
   return Padding(
     padding: padding,
     child: Column(mainAxisSize: MainAxisSize.min, children: [
       Row(children: [
-        if (leading != null) ...[leading, const SizedBox(width: 6)],
+        if (leading != null) ...[leading, const SizedBox(width: 8)],
         Text(title,
             style: const TextStyle(
-                fontSize: 18, fontWeight: FontWeight.w800, color: kInk)),
+                fontSize: 19, fontWeight: FontWeight.w800, color: kInk)),
         const Spacer(),
         statCounters(),
       ]),
+      const SizedBox(height: 6),
+      const StaminaRow(),
     ]),
   );
 }
 
-/// ヘッダーの ⚡スタミナ。トロフィーの左に置く。
-/// 1行に みんな並ぶので 小さめ。数・ゲージ・のこり時間を よこ一列に出す
-class StaminaMini extends StatefulWidget {
-  const StaminaMini({super.key});
+/// ヘッダー2行目の ⚡スタミナ。独立した行なので
+/// カウンター(🏆⭐)の大きさに 合わせる必要がない。
+/// よこ幅いっぱい使って、数・ゲージ・のこり時間を ゆったり出す
+class StaminaRow extends StatefulWidget {
+  const StaminaRow({super.key});
   @override
-  State<StaminaMini> createState() => _StaminaMiniState();
+  State<StaminaRow> createState() => _StaminaRowState();
 }
 
-class _StaminaMiniState extends State<StaminaMini> {
+class _StaminaRowState extends State<StaminaRow> {
   Timer? _tick;
 
   @override
@@ -1522,22 +1528,25 @@ class _StaminaMiniState extends State<StaminaMini> {
   Widget build(BuildContext context) {
     final now = Player.stamina;
     final full = now >= Player.maxStamina;
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(Icons.bolt_rounded, color: now > 0 ? kStar : kHeart, size: 15),
-      const SizedBox(width: 1),
+    return Row(children: [
+      Icon(Icons.bolt_rounded, color: now > 0 ? kStar : kHeart, size: 19),
+      const SizedBox(width: 3),
       Text('$now',
           style: TextStyle(
               color: now > 0 ? kInk : kHeart,
               fontWeight: FontWeight.w800,
-              fontSize: 12)),
-      const SizedBox(width: 3),
-      const SizedBox(width: 17, child: StaminaBar(height: 4)),
+              fontSize: 15)),
+      Text(' / ${Player.maxStamina}',
+          style: const TextStyle(
+              color: kInkSoft, fontWeight: FontWeight.w800, fontSize: 11)),
+      const SizedBox(width: 8),
+      const Expanded(child: StaminaBar(height: 7)),
       // 満タンのときは 出さない（ゲージの色で わかる）
       if (!full) ...[
-        const SizedBox(width: 3),
+        const SizedBox(width: 8),
         Text(mmss(Player.secondsToNextStamina),
             style: const TextStyle(
-                color: kInkSoft, fontWeight: FontWeight.w800, fontSize: 9)),
+                color: kInkSoft, fontWeight: FontWeight.w800, fontSize: 12)),
       ],
     ]);
   }
@@ -1557,21 +1566,19 @@ class _StatCountersRow extends StatelessWidget {
     Widget counter(IconData i, String t, Color c) => Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(i, color: c, size: 16),
-            const SizedBox(width: 1),
+            Icon(i, color: c, size: 17),
+            const SizedBox(width: 2),
             Text(t,
                 style: const TextStyle(
-                    color: kInk, fontWeight: FontWeight.w800, fontSize: 11)),
+                    color: kInk, fontWeight: FontWeight.w800, fontSize: 12)),
           ],
         );
     return Row(mainAxisSize: MainAxisSize.min, children: [
-      const StaminaMini(),
-      const SizedBox(width: 5),
       counter(Icons.emoji_events, shortNum(Player.trophies), kGold),
-      const SizedBox(width: 4),
+      const SizedBox(width: 5),
       counter(Icons.star_rounded, shortNum(Player.stars), kStar),
-      const SizedBox(width: 4),
-      const BgmButton(size: 18),
+      const SizedBox(width: 5),
+      const BgmButton(size: 19),
     ]);
   }
 }
@@ -1601,6 +1608,8 @@ Widget statTopBar({VoidCallback? onToggleBgm, Widget? leading}) {
             color: Bgm.on ? kGold : kInkSoft, size: 24),
       ),
       ]),
+      const SizedBox(height: 6),
+      const StaminaRow(),
     ]),
   );
 }
@@ -2679,7 +2688,7 @@ class SubScreen extends StatelessWidget {
               // もどれる画面は もどる、下タブの画面は 三本線
               leading: showBack
                   ? SizedBox(
-                      width: 30,
+                      width: 34,
                       child: IconButton(
                         padding: EdgeInsets.zero,
                         icon:

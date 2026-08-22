@@ -30,7 +30,7 @@ void main() {
       await tester.pumpWidget(MaterialApp(home: e.value));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      final box = tester.getRect(find.byType(StaminaMini).first);
+      final box = tester.getRect(find.byType(StaminaRow).first);
       // ignore: avoid_print
       print('  ${e.key}: rect=$box');
       widths[e.key] = box.width;
