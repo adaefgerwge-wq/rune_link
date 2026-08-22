@@ -1343,18 +1343,18 @@ class _StaminaGaugeState extends State<StaminaGauge> {
       ),
       child: Column(children: [
         Row(children: [
-          const Icon(Icons.bolt_rounded, color: kStar, size: 20),
-          const SizedBox(width: 3),
+          const Icon(Icons.bolt_rounded, color: kStar, size: 22),
+          const SizedBox(width: 4),
           Text('$now',
               style: const TextStyle(
-                  color: kInk, fontWeight: FontWeight.w800, fontSize: 18)),
+                  color: kInk, fontWeight: FontWeight.w800, fontSize: 20)),
           Text(' / ${Player.maxStamina}',
               style: const TextStyle(
                   color: kInkSoft, fontWeight: FontWeight.w800, fontSize: 11)),
           const Spacer(),
           // 満タンのときは 文字を出さない（ゲージが いっぱいなので わかる）
           if (!full)
-            Text('つぎのかいふくまで ${mmss(Player.secondsToNextStamina)}',
+            Text('かいふくまで ${mmss(Player.secondsToNextStamina)}',
                 style: const TextStyle(
                     color: kInkSoft,
                     fontWeight: FontWeight.w800,
