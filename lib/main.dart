@@ -867,7 +867,14 @@ class RuneLinkApp extends StatelessWidget {
       title: 'rune link',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-          scaffoldBackgroundColor: kBg, fontFamily: 'MPLUSRounded1c'),
+        scaffoldBackgroundColor: kBg,
+        fontFamily: 'MPLUSRounded1c',
+        // 配色を決めておかないと Material の 既定色（青）が
+        // 波紋や 暗幕に出てしまう。アプリの紫にそろえる
+        colorScheme: ColorScheme.fromSeed(seedColor: kPurple),
+        splashColor: kPurple.withValues(alpha: 0.12),
+        highlightColor: kPurple.withValues(alpha: 0.06),
+      ),
       home: const MainShell(),
     );
   }
@@ -1639,6 +1646,8 @@ class MainShell extends StatelessWidget {
           key: gShellScaffold,
           backgroundColor: kBg,
           drawer: const AppDrawer(),
+          // 閉じるときの暗幕。指定しないと 青みがかる
+          drawerScrimColor: Colors.black.withValues(alpha: 0.38),
           body: Column(children: [
             Expanded(
               child: AnimatedSwitcher(
