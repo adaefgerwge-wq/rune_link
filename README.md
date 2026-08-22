@@ -14,6 +14,7 @@
 - 勝つと⭐がもらえ、**ショップでこうげき・たいりょくを恒久強化**できる
 - クリア済みステージは**むずかしさ3段階**で周回でき、⭐が多くもらえる
 - **ちょうせん**6種（3ターン以内・道具なし・印しばり など）の特殊ルール戦
+- **スタミナ制**。バトル1回で⚡1〜3つかい、5分で1つもどる（さいだい20）
 
 **デザインの参考**：Epop（学習アプリ）＋ぷちっと★ロックシューター
 ＝ 薄紫の背景に白い角丸カード、ぷっくりボタン、2.5頭身のちびキャラ
@@ -53,13 +54,39 @@ no-cacheヘッダー付きで配信している。
 
 ### テスト
 ```bash
-flutter test        # 45件
+flutter test        # 62件
 flutter analyze     # warning ゼロを保つ（info は元から30件ある）
 ```
 
-> クリック操作のテストは**ブラウザではなくウィジェットテストで**やること。
-> プレビュー環境では画面のクリック・スクロールが通らない（表示は見える）。
-> 実機に近い縦長（375×812）でテストしないと、はみ出しを見逃す。
+> レイアウトのテストは実機に近い縦長（375×812）でやること。
+> 800×600 の初期サイズだと、はみ出しも文字の見切れも見逃す。
+
+#### プレビューで画面を操作する方法
+
+`computer` ツールのクリックは**この環境では通らない**（画面表示だけは見える）。
+かわりに JavaScript でポインタイベントを送ると動く。
+**down と up の間に 90ms ほど空けないと Flutter がタップと認識しない**（ここでハマった）。
+
+```js
+window.tap = (x, y) => new Promise(res => {
+  const el = document.elementFromPoint(x, y) || document.body;
+  const base = {clientX: x, clientY: y, bubbles: true, cancelable: true,
+    pointerId: 1, pointerType: 'mouse', isPrimary: true,
+    width: 1, height: 1, pressure: 0.5, button: 0};
+  el.dispatchEvent(new PointerEvent('pointerdown', {...base, buttons: 1}));
+  el.dispatchEvent(new MouseEvent('mousedown', {...base, buttons: 1}));
+  setTimeout(() => {
+    el.dispatchEvent(new PointerEvent('pointerup', {...base, buttons: 0, pressure: 0}));
+    el.dispatchEvent(new MouseEvent('mouseup', {...base, buttons: 0}));
+    el.dispatchEvent(new MouseEvent('click', {...base, buttons: 0}));
+    setTimeout(() => res('ok'), 700);
+  }, 90);
+});
+```
+
+座標はスクリーンショットから読む（375×812 で1:1）。
+`read_page` は Flutter の中身を読めないが、画面いっぱいの
+`flt-semantics-placeholder` を1回クリックすると読めるようになる。
 
 ---
 
@@ -75,6 +102,8 @@ flutter analyze     # warning ゼロを保つ（info は元から30件ある）
 | リーグ | ランキング（相手は仮データ） |
 | プレミアム | 課金プラン（見た目だけ） |
 
+上部に **⚡スタミナ・🏆トロフィー・⭐スター** が つねに出る。
+
 他に：**マイページ**（レベル・記録・称号21個）／**ショップ**（強化2種＋アイテム4種）／
 **ミッション**（日替わり3つ＋通常）／**ちょうせん**（特殊ルール6種）／
 **きせかえ**（枠6種）／**メニュー**（☰）
@@ -89,6 +118,8 @@ flutter analyze     # warning ゼロを保つ（info は元から30件ある）
 | `Player` | セーブデータ全部（`shared_preferences`）。⭐🏆・進行・統計・アイテム・きせかえ・デイリー・**強化レベル・ステージ別クリア難易度・ちょうせん達成** |
 | `Difficulty` | むずかしさ3段階。敵のHP/攻撃力と ⭐の倍率を持つ |
 | `Challenge` | ちょうせん6種。ターン制限・道具禁止・印しばり などの条件をまとめた定義 |
+| `StaminaCounter` | ⚡と つぎの回復までの時間。1秒ごとに 自分で見なおす |
+| `payStamina()` | バトルに入る前に ⚡をはらう。たりなければ ⭐での回復をすすめる |
 | `MainShell` | 下タブを固定して中身だけ差し替える外枠 |
 | `DressedChar` | きせかえを反映したキャラ表示（全画面で共通） |
 | `ChunkyButton` / `ChunkyCircle` / `ChunkyPill` | 押すと沈むボタン |
@@ -121,6 +152,13 @@ flutter analyze     # warning ゼロを保つ（info は元から30件ある）
 | 勝利の⭐ | `(15 + (ステージ-1)*5) × むずかしさ倍率(1.0/2.0/3.5)` |
 | むずかしさ | 敵HP ×1.0/1.6/2.4、敵こうげき ×1.0/1.3/1.6 |
 | ちょうせんの⭐ | 初回120〜400、2回目からは1/4 |
+| スタミナ | さいだい20、5分で1つ回復 |
+| ⚡の消費 | ふつう1／つよい2／げきつよ3／ちょうせん3 |
+| ⭐での全回復 | 60⭐から。1日に使うたび倍（60→120→240…）、5回まで |
+
+> **むずかしいほうが ⚡あたりの⭐が多くなる**ようにしてある
+> （ステージ6：ふつう40/1 → げきつよ140/3≒47）。
+> 周回するなら むずかしいほうが得、という形にそろえた。
 
 ## 次にやること
 

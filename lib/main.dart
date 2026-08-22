@@ -55,6 +55,83 @@ class Player {
   static String cosmetic = 'none'; // いま つけているもの
   static Set<String> ownedCosmetics = {'none'}; // 持っているもの
 
+  // ---- スタミナ（バトルに挑むための げんき）----
+  static const int maxStamina = 20;
+  static const int staminaMinutes = 5; // 1つ回復するのにかかる分
+  static const int maxRefillsPerDay = 5; // 1日に⭐で回復できる回数
+  static int _stamina = maxStamina;
+  static int staminaAt = 0; // 最後に数えなおした時刻（ミリ秒）
+  static int refillsToday = 0; // きょう⭐で回復した回数
+
+  /// いまのスタミナ（読むたびに 時間ぶんを足してから返す）
+  static int get stamina {
+    _syncStamina();
+    return _stamina;
+  }
+
+  static int get _stepMillis => staminaMinutes * 60 * 1000;
+
+  /// 前に数えた時からの 経過ぶんを足す
+  /// アプリを閉じていても 時計で計算するので ちゃんと回復する
+  static void _syncStamina() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (staminaAt == 0) {
+      staminaAt = now;
+      return;
+    }
+    if (_stamina >= maxStamina) {
+      staminaAt = now; // 満タンの間は 数えはじめを いまに合わせておく
+      return;
+    }
+    final gained = (now - staminaAt) ~/ _stepMillis;
+    if (gained <= 0) return;
+    _stamina = (_stamina + gained).clamp(0, maxStamina);
+    // 満タンになったら いま、まだなら 使ったぶんだけ進める（はんぱを捨てない）
+    staminaAt =
+        _stamina >= maxStamina ? now : staminaAt + gained * _stepMillis;
+  }
+
+  /// つぎの1つが回復するまでの 秒数（満タンなら0）
+  static int get secondsToNextStamina {
+    _syncStamina();
+    if (_stamina >= maxStamina) return 0;
+    final left = staminaAt + _stepMillis - DateTime.now().millisecondsSinceEpoch;
+    return (left / 1000).ceil().clamp(0, staminaMinutes * 60);
+  }
+
+  static bool canPlay(int cost) => stamina >= cost;
+
+  /// スタミナを つかう（たりなければ false）
+  static bool spendStamina(int cost) {
+    if (!canPlay(cost)) return false;
+    // 満タンから減る瞬間に 回復の数えはじめを いまに合わせる
+    if (_stamina >= maxStamina) {
+      staminaAt = DateTime.now().millisecondsSinceEpoch;
+    }
+    _stamina -= cost;
+    save();
+    return true;
+  }
+
+  /// ⭐での回復のねだん（きょう使うほど倍になる）
+  static int get refillCost => 60 * (1 << refillsToday);
+
+  /// きょう まだ⭐で回復できるか
+  static bool get canRefillToday => refillsToday < maxRefillsPerDay;
+
+  /// ⭐をはらって スタミナを満タンにする
+  static bool buyRefill() {
+    if (!canRefillToday) return false;
+    final c = refillCost;
+    if (stars < c) return false;
+    stars -= c;
+    refillsToday += 1;
+    _stamina = maxStamina;
+    staminaAt = DateTime.now().millisecondsSinceEpoch;
+    save();
+    return true;
+  }
+
   // クリアした ちょうせん（kChallenges の番号）
   static Set<int> challengeCleared = {};
 
@@ -150,6 +227,9 @@ class Player {
       atkLv = (p.getInt('atkLv') ?? 0).clamp(0, maxUpgradeLv);
       hpLv = (p.getInt('hpLv') ?? 0).clamp(0, maxUpgradeLv);
       stageBest = {};
+      _stamina = (p.getInt('stamina') ?? maxStamina).clamp(0, maxStamina);
+      staminaAt = p.getInt('staminaAt') ?? 0;
+      refillsToday = p.getInt('refillsToday') ?? 0;
       challengeCleared = (p.getStringList('challengeCleared') ?? [])
           .map((e) => int.tryParse(e) ?? -1)
           .where((e) => e >= 0 && e < kChallenges.length)
@@ -204,6 +284,7 @@ class Player {
       }
     }
     todayWins = 0; // 新しい日なのでリセット
+    refillsToday = 0; // ⭐での回復も 1日ぶん もどす
     _rollDaily(); // ミッションも入れ替える
   }
 
@@ -255,6 +336,9 @@ class Player {
       for (final e in stageBest.entries) {
         await p.setInt('best_${e.key}', e.value);
       }
+      await p.setInt('stamina', _stamina);
+      await p.setInt('staminaAt', staminaAt);
+      await p.setInt('refillsToday', refillsToday);
       await p.setStringList('challengeCleared',
           challengeCleared.map((e) => e.toString()).toList());
       await p.setInt('dailyWins', dailyWins);
@@ -355,6 +439,9 @@ class Player {
     hpLv = 0;
     stageBest = {};
     challengeCleared = {};
+    _stamina = maxStamina;
+    staminaAt = 0;
+    refillsToday = 0;
     elemUses = {'water': 0, 'fire': 0, 'thunder': 0};
     defeatedByName = {};
     items = {};
@@ -693,6 +780,14 @@ const List<Challenge> kChallenges = [
     reward: 400,
   ),
 ];
+
+/// バトル1回で つかうスタミナ
+/// むずかしいほど 多く要るが、もらえる⭐のほうが 伸びが大きい
+int staminaCost({int diff = 0, int challenge = -1}) {
+  if (challenge >= 0) return 3; // ちょうせん
+  const byDiff = [1, 2, 3];
+  return byDiff[diff.clamp(0, byDiff.length - 1)];
+}
 
 /// そのステージ・むずかしさで 勝ったときにもらえる⭐
 /// 先のステージほど、むずかしいほど 多くもらえる
@@ -1123,22 +1218,161 @@ class _BgmButtonState extends State<BgmButton> {
 }
 
 /// 右上に並ぶ トロフィー・スター・音 の3つ
+/// スタミナの表示。回復までの のこり時間も出す
+class StaminaCounter extends StatefulWidget {
+  final double size;
+  const StaminaCounter({super.key, this.size = 22});
+  @override
+  State<StaminaCounter> createState() => _StaminaCounterState();
+}
+
+class _StaminaCounterState extends State<StaminaCounter> {
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    // 満タンでないときだけ 1秒ごとに 数字を見なおす
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      if (Player.stamina < Player.maxStamina) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  static String mmss(int sec) {
+    final m = sec ~/ 60;
+    final s = sec % 60;
+    return '$m:${s.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = Player.stamina;
+    final full = now >= Player.maxStamina;
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(Icons.bolt_rounded,
+          color: now > 0 ? kStar : kInkSoft, size: widget.size),
+      const SizedBox(width: 3),
+      Text('$now',
+          style: TextStyle(
+              color: now > 0 ? kInk : kHeart,
+              fontWeight: FontWeight.w800,
+              fontSize: widget.size * 0.68)),
+      if (!full) ...[
+        const SizedBox(width: 4),
+        Text(mmss(Player.secondsToNextStamina),
+            style: TextStyle(
+                color: kInkSoft,
+                fontWeight: FontWeight.w700,
+                fontSize: widget.size * 0.5)),
+      ],
+    ]);
+  }
+}
+
+/// 「⚡3」の 小さいバッジ（名前のとなりに置く）
+Widget staminaBadge(int cost) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: Color.alphaBlend(kStar.withValues(alpha: 0.18), Colors.white),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.bolt_rounded, color: kStar, size: 12),
+        Text('$cost',
+            style: const TextStyle(
+                color: kInk, fontWeight: FontWeight.w800, fontSize: 11)),
+      ]),
+    );
+
+/// スタミナがたりないとき：待つか ⭐で回復するかを えらぶ
+/// 回復して 遊べるようになったら true
+Future<bool> askRefill(BuildContext context, int cost) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) {
+      final canBuy = Player.canRefillToday && Player.stars >= Player.refillCost;
+      return AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: const Text('スタミナが たりない',
+            style: TextStyle(fontWeight: FontWeight.w800)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(
+              'このバトルには ⚡$cost 必要。'
+              'いまは ⚡${Player.stamina} しかない。',
+              style: const TextStyle(color: kInkSoft)),
+          const SizedBox(height: 10),
+          Text(
+              Player.canRefillToday
+                  ? '${Player.staminaMinutes}分ごとに 1つもどる。'
+                      '⭐${Player.refillCost} で いますぐ満タンにもできる'
+                      '（きょう あと ${Player.maxRefillsPerDay - Player.refillsToday}回）。'
+                  : '${Player.staminaMinutes}分ごとに 1つもどる。'
+                      'きょうの ⭐での回復は つかいきった。',
+              style: const TextStyle(fontSize: 12, color: kInkSoft)),
+        ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('まつ')),
+          if (Player.canRefillToday)
+            TextButton(
+              onPressed: canBuy
+                  ? () {
+                      Player.buyRefill();
+                      Navigator.of(ctx).pop(true);
+                    }
+                  : null,
+              child: Text('⭐${Player.refillCost} で 満タン'),
+            ),
+        ],
+      );
+    },
+  );
+  return ok ?? false;
+}
+
+/// スタミナを はらってバトルに入れるか どうか
+/// たりなければ 回復をすすめて、回復できたら true
+Future<bool> payStamina(BuildContext context, int cost) async {
+  if (Player.spendStamina(cost)) return true;
+  final refilled = await askRefill(context, cost);
+  if (!refilled) return false;
+  return Player.spendStamina(cost);
+}
+
+/// 1000以上は「1.2k」のように みじかくする
+String shortNum(int n) {
+  if (n < 1000) return '$n';
+  if (n < 10000) return '${(n / 1000).toStringAsFixed(1)}k';
+  return '${n ~/ 1000}k';
+}
+
 Widget statCounters() {
   Widget counter(IconData i, String t, Color c) => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(i, color: c, size: 22),
-          const SizedBox(width: 4),
+          Icon(i, color: c, size: 18),
+          const SizedBox(width: 2),
           Text(t,
               style: const TextStyle(
-                  color: kInk, fontWeight: FontWeight.w800, fontSize: 15)),
+                  color: kInk, fontWeight: FontWeight.w800, fontSize: 13)),
         ],
       );
   return Row(mainAxisSize: MainAxisSize.min, children: [
-    counter(Icons.emoji_events, '${Player.trophies}', kGold),
-    const SizedBox(width: 12),
-    counter(Icons.star_rounded, '${Player.stars}', kStar),
-    const SizedBox(width: 12),
+    const StaminaCounter(size: 18),
+    const SizedBox(width: 6),
+    counter(Icons.emoji_events, shortNum(Player.trophies), kGold),
+    const SizedBox(width: 6),
+    counter(Icons.star_rounded, shortNum(Player.stars), kStar),
+    const SizedBox(width: 6),
     const BgmButton(),
   ]);
 }
@@ -1156,10 +1390,12 @@ Widget statTopBar({VoidCallback? onToggleBgm, Widget? leading}) {
     child: Row(children: [
       leading ?? const Icon(Icons.menu, color: kInk, size: 26),
       const Spacer(),
-      counter(Icons.emoji_events, '${Player.trophies}', kGold),
-      const SizedBox(width: 16),
-      counter(Icons.star_rounded, '${Player.stars}', kStar),
-      const SizedBox(width: 16),
+      const StaminaCounter(size: 24),
+      const SizedBox(width: 12),
+      counter(Icons.emoji_events, shortNum(Player.trophies), kGold),
+      const SizedBox(width: 12),
+      counter(Icons.star_rounded, shortNum(Player.stars), kStar),
+      const SizedBox(width: 12),
       // BGMのオン・オフ
       GestureDetector(
         onTap: onToggleBgm,
@@ -2259,13 +2495,23 @@ class SubScreen extends StatelessWidget {
                     icon: const Icon(Icons.arrow_back_rounded, color: kInk),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
-                Text(title,
-                    style: const TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w800,
-                        color: kInk)),
-                const Spacer(),
-                statCounters(),
+                Expanded(
+                  child: Text(title,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w800,
+                          color: kInk)),
+                ),
+                // 見出しを けずらないため、カウンターの幅に上限をつけて
+                // 入りきらないときは そのまま小さく縮める
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 150),
+                  child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: statCounters()),
+                ),
               ]),
             ),
             Expanded(
@@ -2982,6 +3228,11 @@ class ChallengeScreen extends StatefulWidget {
 class _ChallengeScreenState extends State<ChallengeScreen> {
   void _go(int i) async {
     final c = kChallenges[i];
+    if (!await payStamina(context, staminaCost(challenge: i))) {
+      if (mounted) setState(() {});
+      return;
+    }
+    if (!mounted) return;
     await Navigator.of(context).push(fadeSlowRoute(
         BattleScreen(stage: c.stage, challenge: i)));
     Bgm.play(Bgm.home);
@@ -3052,11 +3303,18 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
-                Text(c.name,
-                    style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15,
-                        color: open ? kInk : kInkSoft)),
+                Flexible(
+                  child: Text(c.name,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          color: open ? kInk : kInkSoft)),
+                ),
+                if (open) ...[
+                  const SizedBox(width: 6),
+                  staminaBadge(staminaCost(challenge: i)),
+                ],
                 if (cleared) ...[
                   const SizedBox(width: 6),
                   const Icon(Icons.check_circle_rounded,
@@ -3843,6 +4101,11 @@ class _StageSelectScreenState extends State<StageSelectScreen> {
   }
 
   void _go(int stage, [int diff = 0]) async {
+    if (!await payStamina(context, staminaCost(diff: diff))) {
+      if (mounted) setState(() {}); // ⭐や のこりの表示を見なおす
+      return;
+    }
+    if (!mounted) return;
     await Navigator.of(context)
         .push(fadeSlowRoute(BattleScreen(stage: stage, diff: diff)));
     Bgm.play(Bgm.home);
@@ -3887,7 +4150,7 @@ class _StageSelectScreenState extends State<StageSelectScreen> {
               style: const TextStyle(
                   fontWeight: FontWeight.w800, fontSize: 17, color: kInk)),
           const SizedBox(height: 4),
-          const Text('むずかしいほど ⭐がたくさん もらえる',
+          const Text('むずかしいほど ⭐がたくさん もらえる（⚡も おおく つかう）',
               style: TextStyle(fontSize: 12, color: kInkSoft)),
           const SizedBox(height: 14),
             for (var d = 0; d < kDifficulties.length; d++)
@@ -3926,11 +4189,18 @@ class _StageSelectScreenState extends State<StageSelectScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
-                Text(def.label,
-                    style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15,
-                        color: open ? kInk : kInkSoft)),
+                Flexible(
+                  child: Text(def.label,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          color: open ? kInk : kInkSoft)),
+                ),
+                if (open) ...[
+                  const SizedBox(width: 6),
+                  staminaBadge(staminaCost(diff: d)),
+                ],
                 if (done) ...[
                   const SizedBox(width: 6),
                   const Icon(Icons.check_circle_rounded,
@@ -4829,6 +5099,10 @@ class _BattleScreenState extends State<BattleScreen>
   /// 勝ったとき じっさいにもらった⭐（勝利画面に出す）
   int _gained = 0;
 
+  /// このバトル1回ぶんの スタミナ
+  int get _cost =>
+      staminaCost(diff: widget.diff, challenge: widget.challenge);
+
   /// このバトルの むずかしさ
   Difficulty get _diff =>
       kDifficulties[widget.diff.clamp(0, kDifficulties.length - 1)];
@@ -5155,6 +5429,21 @@ class _BattleScreenState extends State<BattleScreen>
         }
       });
     });
+  }
+
+  /// 「つぎのてき」「もういちど」も バトル1回ぶん スタミナを はらう
+  /// はらえなければ 結果画面のまま（ホームへは もどれる）
+  void _again(bool win) async {
+    if (!await payStamina(context, _cost)) {
+      if (mounted) setState(() {});
+      return;
+    }
+    if (!mounted) return;
+    if (win) {
+      _continue();
+    } else {
+      _retry();
+    }
   }
 
   void _continue() {
@@ -5841,10 +6130,10 @@ class _BattleScreenState extends State<BattleScreen>
             tag: 'main-btn',
             delay: win ? 620 : 0,
             child: chunkyButton(
-              label: win ? 'つぎのてき' : 'もういちど',
+              label: win ? 'つぎのてき  ⚡$_cost' : 'もういちど  ⚡$_cost',
               color: win ? kGreen : kPurple,
               edge: win ? kGreenDeep : kPurpleDeep,
-              onTap: win ? _continue : _retry,
+              onTap: () => _again(win),
             ),
           ),
           const SizedBox(height: 10),
