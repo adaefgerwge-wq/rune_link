@@ -1471,28 +1471,28 @@ class MenuButton extends StatelessWidget {
 }
 
 /// 画面いちばん上の 共通ヘッダー。
-/// 1行目：三本線／もどる ＋ 見出し ＋ 🏆⭐🔊
-/// 2行目：⚡スタミナ（独立した行）。
-/// スタミナを 1行目に混ぜると せまくて カウンターと同じ大きさまで
-/// 縮めるはめになるので、行を分けて 独立した大きさで出す。
+/// 三本線／もどる ＋ （見出し）＋ ⚡スタミナ ＋ 🏆⭐🔊 を 1行に。
+///
+/// スタミナは カウンター(🏆⭐)の大きさに 合わせない。
+/// のこり幅は ゲージが すいとるので、数字と時間の大きさは どの画面でも同じ。
 Widget screenHeader({
-  required String title,
+  String? title,
   Widget? leading,
-  EdgeInsets padding = const EdgeInsets.fromLTRB(16, 8, 14, 4),
+  EdgeInsets padding = const EdgeInsets.fromLTRB(14, 8, 10, 4),
 }) {
   return Padding(
     padding: padding,
-    child: Column(mainAxisSize: MainAxisSize.min, children: [
-      Row(children: [
-        if (leading != null) ...[leading, const SizedBox(width: 8)],
+    child: Row(children: [
+      if (leading != null) ...[leading, const SizedBox(width: 6)],
+      if (title != null) ...[
         Text(title,
             style: const TextStyle(
                 fontSize: 19, fontWeight: FontWeight.w800, color: kInk)),
-        const Spacer(),
-        statCounters(),
-      ]),
-      const SizedBox(height: 6),
+        const SizedBox(width: 8),
+      ],
       const StaminaRow(),
+      const Spacer(),
+      statCounters(),
     ]),
   );
 }
@@ -1528,7 +1528,7 @@ class _StaminaRowState extends State<StaminaRow> {
   Widget build(BuildContext context) {
     final now = Player.stamina;
     final full = now >= Player.maxStamina;
-    return Row(children: [
+    return Row(mainAxisSize: MainAxisSize.min, children: [
       Icon(Icons.bolt_rounded, color: now > 0 ? kStar : kHeart, size: 19),
       const SizedBox(width: 3),
       Text('$now',
@@ -1536,17 +1536,15 @@ class _StaminaRowState extends State<StaminaRow> {
               color: now > 0 ? kInk : kHeart,
               fontWeight: FontWeight.w800,
               fontSize: 15)),
-      Text(' / ${Player.maxStamina}',
-          style: const TextStyle(
-              color: kInkSoft, fontWeight: FontWeight.w800, fontSize: 11)),
-      const SizedBox(width: 8),
-      const Expanded(child: StaminaBar(height: 7)),
+      const SizedBox(width: 6),
+      // 幅を のばさず 固定にする＝見出しの長さに関係なく 同じ見え方になる
+      const SizedBox(width: 22, child: StaminaBar(height: 7)),
       // 満タンのときは 出さない（ゲージの色で わかる）
       if (!full) ...[
         const SizedBox(width: 8),
         Text(mmss(Player.secondsToNextStamina),
             style: const TextStyle(
-                color: kInkSoft, fontWeight: FontWeight.w800, fontSize: 12)),
+                color: kInkSoft, fontWeight: FontWeight.w800, fontSize: 11)),
       ],
     ]);
   }
@@ -1566,19 +1564,17 @@ class _StatCountersRow extends StatelessWidget {
     Widget counter(IconData i, String t, Color c) => Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(i, color: c, size: 17),
-            const SizedBox(width: 2),
+            Icon(i, color: c, size: 15),
+            const SizedBox(width: 1),
             Text(t,
                 style: const TextStyle(
-                    color: kInk, fontWeight: FontWeight.w800, fontSize: 12)),
+                    color: kInk, fontWeight: FontWeight.w800, fontSize: 11)),
           ],
         );
     return Row(mainAxisSize: MainAxisSize.min, children: [
       counter(Icons.emoji_events, shortNum(Player.trophies), kGold),
-      const SizedBox(width: 5),
+      const SizedBox(width: 2),
       counter(Icons.star_rounded, shortNum(Player.stars), kStar),
-      const SizedBox(width: 5),
-      const BgmButton(size: 19),
     ]);
   }
 }
@@ -1593,23 +1589,21 @@ Widget statTopBar({VoidCallback? onToggleBgm, Widget? leading}) {
       ]);
   return Padding(
     padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
-    child: Column(mainAxisSize: MainAxisSize.min, children: [
-      Row(children: [
+    child: Row(children: [
       leading ?? const Icon(Icons.menu, color: kInk, size: 26),
+      const SizedBox(width: 10),
+      const StaminaRow(),
       const Spacer(),
       counter(Icons.emoji_events, shortNum(Player.trophies), kGold),
-      const SizedBox(width: 12),
+      const SizedBox(width: 8),
       counter(Icons.star_rounded, shortNum(Player.stars), kStar),
-      const SizedBox(width: 12),
+      const SizedBox(width: 8),
       // BGMのオン・オフ
       GestureDetector(
         onTap: onToggleBgm,
         child: Icon(Bgm.on ? Icons.volume_up_rounded : Icons.volume_off_rounded,
             color: Bgm.on ? kGold : kInkSoft, size: 24),
       ),
-      ]),
-      const SizedBox(height: 6),
-      const StaminaRow(),
     ]),
   );
 }
@@ -1830,6 +1824,16 @@ class _AppDrawerState extends State<AppDrawer> {
                         builder: (_) => const MissionScreen()));
                   });
                 }),
+                // 音の切りかえ（ヘッダーには 場所がないので ここに置く）
+                _tile(
+                  Bgm.on ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                  Bgm.on ? '音を けす' : '音を だす',
+                  () async {
+                    await Bgm.toggle();
+                    if (mounted) setState(() {});
+                  },
+                  color: Bgm.on ? kGold : kInkSoft,
+                ),
                 _tile(Icons.military_tech_rounded, 'ちょうせん', () {
                   _guard('ちょうせんを ひらきますか？',
                       'バトルは そのまま。とじると もどれます。', (nav) {
@@ -2688,7 +2692,7 @@ class SubScreen extends StatelessWidget {
               // もどれる画面は もどる、下タブの画面は 三本線
               leading: showBack
                   ? SizedBox(
-                      width: 34,
+                      width: 28,
                       child: IconButton(
                         padding: EdgeInsets.zero,
                         icon:

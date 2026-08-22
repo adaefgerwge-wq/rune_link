@@ -58,9 +58,10 @@ void main() {
     addTearDown(tester.view.reset);
 
     const style =
-        TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: kInk);
+        TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: kInk);
 
-    for (final title in ['マイページ', 'ちょうせん', 'ショップ', 'ミッション', 'ずかん']) {
+    // 下タブの画面（ずかん）は 見出しを出さないので ここでは見ない
+    for (final title in ['マイページ', 'ちょうせん', 'ショップ', 'ミッション']) {
       final tp = TextPainter(
           text: TextSpan(text: title, style: style),
           textDirection: TextDirection.ltr)

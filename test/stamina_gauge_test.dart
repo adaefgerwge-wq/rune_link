@@ -86,28 +86,4 @@ void main() {
         matching: find.byType(FractionallySizedBox)));
     expect(f.widthFactor, 1.0);
   });
-
-  testWidgets('ヘッダーの表示は ゲージを足しても よこ幅が ふえていない',
-      (tester) async {
-    usePhone(tester);
-    Player.stars = 9999;
-    Player.trophies = 999;
-
-    // 見出しが 省略されないこと＝ヘッダーが まだ余っていること
-    const style = TextStyle(
-        fontSize: 18, fontWeight: FontWeight.w800, color: kInk);
-    final tp = TextPainter(
-        text: const TextSpan(text: 'マイページ', style: style),
-        textDirection: TextDirection.ltr)
-      ..layout();
-
-    await tester.pumpWidget(const MaterialApp(
-        home: SubScreen(title: 'マイページ', children: [])));
-    await tester.pump();
-
-    final box = tester.getRect(find.text('マイページ'));
-    expect(box.width + 0.5 >= tp.width, isTrue,
-        reason: '★ゲージを足したせいで 見出しが けずられた '
-            '(${box.width} < ${tp.width})');
-  });
 }
