@@ -1307,10 +1307,10 @@ class _StaminaGaugeState extends State<StaminaGauge> {
     final now = Player.stamina;
     final full = now >= Player.maxStamina;
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+      padding: const EdgeInsets.fromLTRB(14, 9, 14, 10),
       decoration: BoxDecoration(
         color: const Color(0xFFF6F6FB),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Column(children: [
         Row(children: [
@@ -1334,8 +1334,8 @@ class _StaminaGaugeState extends State<StaminaGauge> {
                   fontWeight: FontWeight.w800,
                   fontSize: 12)),
         ]),
-        const SizedBox(height: 8),
-        const StaminaBar(height: 12),
+        const SizedBox(height: 7),
+        const StaminaBar(height: 8),
       ]),
     );
   }
@@ -1372,7 +1372,9 @@ class _StaminaCounterState extends State<StaminaCounter> {
   Widget build(BuildContext context) {
     final now = Player.stamina;
     final full = now >= Player.maxStamina;
-    // 数字の下に ゲージを敷く＝よこ幅を増やさずに 見た目でも わかるようにする
+    // 数字の下に ゲージを敷く。
+    // のこり時間は 出さない（ホームのゲージに あるので 重複するうえ、
+    // ヘッダーの幅を食って 見出しや 他のカウンターを 押しつぶしていた）
     return Row(mainAxisSize: MainAxisSize.min, children: [
       Icon(Icons.bolt_rounded,
           color: now > 0 ? kStar : kInkSoft, size: widget.size),
@@ -1381,25 +1383,17 @@ class _StaminaCounterState extends State<StaminaCounter> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            Text('$now',
-                style: TextStyle(
-                    color: now > 0 ? kInk : kHeart,
-                    fontWeight: FontWeight.w800,
-                    fontSize: widget.size * 0.68)),
-            if (!full) ...[
-              const SizedBox(width: 4),
-              Text(mmss(Player.secondsToNextStamina),
-                  style: TextStyle(
-                      color: kInkSoft,
-                      fontWeight: FontWeight.w700,
-                      fontSize: widget.size * 0.5)),
-            ],
-          ]),
+          Text('$now',
+              style: TextStyle(
+                  color: now > 0
+                      ? (full ? kInk : kStar)
+                      : kHeart,
+                  fontWeight: FontWeight.w800,
+                  fontSize: widget.size * 0.68)),
           const SizedBox(height: 2),
           SizedBox(
-              width: widget.size * 2.2,
-              child: StaminaBar(height: widget.size * 0.2)),
+              width: widget.size * 1.35,
+              child: StaminaBar(height: widget.size * 0.18)),
         ],
       ),
     ]);
@@ -1485,26 +1479,40 @@ String shortNum(int n) {
   return '${n ~/ 1000}k';
 }
 
-Widget statCounters() {
-  Widget counter(IconData i, String t, Color c) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(i, color: c, size: 18),
-          const SizedBox(width: 2),
-          Text(t,
-              style: const TextStyle(
-                  color: kInk, fontWeight: FontWeight.w800, fontSize: 13)),
-        ],
-      );
-  return Row(mainAxisSize: MainAxisSize.min, children: [
-    const StaminaCounter(size: 18),
-    const SizedBox(width: 6),
-    counter(Icons.emoji_events, shortNum(Player.trophies), kGold),
-    const SizedBox(width: 6),
-    counter(Icons.star_rounded, shortNum(Player.stars), kStar),
-    const SizedBox(width: 6),
-    const BgmButton(),
-  ]);
+/// ヘッダーに置く ⚡🏆⭐。
+/// 375px に 見出しと いっしょに収まるよう 幅の上限を持たせている。
+/// 上限を ここで持つことで どの画面でも 同じ大きさで出る。
+/// ヘッダーに置く ⚡🏆⭐。
+/// いちばん狭い画面でも そのまま収まる大きさにしてある。
+/// FittedBox で縮めると 画面ごとに のこり幅・高さが ちがうぶん
+/// 縮みかたが変わって 大きさが そろわなくなるので 縮めない。
+Widget statCounters() => const _StatCountersRow();
+
+class _StatCountersRow extends StatelessWidget {
+  const _StatCountersRow();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget counter(IconData i, String t, Color c) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(i, color: c, size: 17),
+            const SizedBox(width: 2),
+            Text(t,
+                style: const TextStyle(
+                    color: kInk, fontWeight: FontWeight.w800, fontSize: 12)),
+          ],
+        );
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      const StaminaCounter(size: 17),
+      const SizedBox(width: 5),
+      counter(Icons.emoji_events, shortNum(Player.trophies), kGold),
+      const SizedBox(width: 5),
+      counter(Icons.star_rounded, shortNum(Player.stars), kStar),
+      const SizedBox(width: 5),
+      const BgmButton(size: 19),
+    ]);
+  }
 }
 
 Widget statTopBar({VoidCallback? onToggleBgm, Widget? leading}) {
@@ -2620,30 +2628,25 @@ class SubScreen extends StatelessWidget {
         SafeArea(
           child: Column(children: [
             Padding(
-              padding: EdgeInsets.fromLTRB(showBack ? 8 : 20, 8, 16, 4),
+              padding: EdgeInsets.fromLTRB(showBack ? 4 : 20, 8, 10, 4),
               child: Row(children: [
                 if (showBack)
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back_rounded, color: kInk),
-                    onPressed: () => Navigator.of(context).pop(),
+                  SizedBox(
+                    width: 40,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(Icons.arrow_back_rounded, color: kInk),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
                   ),
-                Expanded(
-                  child: Text(title,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 19,
-                          fontWeight: FontWeight.w800,
-                          color: kInk)),
-                ),
-                // 見出しを けずらないため、カウンターの幅に上限をつけて
-                // 入りきらないときは そのまま小さく縮める
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 150),
-                  child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerRight,
-                      child: statCounters()),
-                ),
+                Text(title,
+                    style: const TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800,
+                        color: kInk)),
+                const SizedBox(width: 6),
+                const Spacer(),
+                statCounters(),
               ]),
             ),
             Expanded(
