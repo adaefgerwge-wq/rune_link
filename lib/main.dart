@@ -563,6 +563,31 @@ final List<TitleDef> kTitles = [
 // 効果音
 class Sfx {
   static final AudioPlayer _p = AudioPlayer();
+
+  /// 印をなぞっている間の キラキラ音。
+  /// ほかの効果音と 同じプレーヤーだと 途中で切ってしまうので 別に持つ。
+  static final AudioPlayer _sparkP = AudioPlayer();
+  static int _sparkIdx = 0;
+
+  /// 前に キラキラを鳴らした時刻（ミリ秒）。
+  /// テストからも 鳴らしすぎ防止の様子を 見られるように 公開してある
+  static int sparkAt = 0;
+
+  /// なぞっている間に 鳴らす。
+  /// 連続で呼ばれるので すこし間をあけ、音の高さも 順に変える
+  static void spark() {
+    if (!Sound.on) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - sparkAt < 110) return; // 鳴りすぎないように
+    sparkAt = now;
+    _sparkIdx = (_sparkIdx + 1) % 3;
+    try {
+      // 音が出せない場でも 止まらないよう 非同期のエラーも 受けておく
+      _sparkP
+          .play(AssetSource('sfx/spark${_sparkIdx + 1}.wav'), volume: 0.55)
+          .catchError((Object _) {});
+    } catch (_) {}
+  }
   static void play(String name) {
     if (!Sound.on) return; // ミュート中は鳴らさない
     try {
@@ -1426,7 +1451,17 @@ class MenuButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => Scaffold.of(context).openDrawer(),
+      onTap: () {
+        // 自前の Scaffold を持つ画面（リーグ・プレミアム・サブ画面）でも
+        // 外枠のメニューが開くように 名ざしで開く
+        final shell = gShellScaffold.currentState;
+        if (shell != null && shell.hasDrawer) {
+          shell.openDrawer();
+          return;
+        }
+        final here = Scaffold.maybeOf(context);
+        if (here != null && here.hasDrawer) here.openDrawer();
+      },
       child: const Padding(
         padding: EdgeInsets.symmetric(vertical: 6, horizontal: 2),
         child: Icon(Icons.menu, color: kInk, size: 26),
@@ -1436,40 +1471,36 @@ class MenuButton extends StatelessWidget {
 }
 
 /// 画面いちばん上の 共通ヘッダー。
-/// 1行目：三本線／もどる ＋ 見出し ＋ 🏆⭐🔊
-/// 2行目：スタミナ。1行目に入れると せまくて 小さくなるので 分けている。
-///        分けたぶん 数字もゲージも大きくでき、のこり時間も出せる。
+/// 三本線／もどる ＋ 見出し ＋ ⚡スタミナ ＋ 🏆⭐🔊 を 1行に並べる。
 Widget screenHeader({
   required String title,
   Widget? leading,
-  EdgeInsets padding = const EdgeInsets.fromLTRB(16, 8, 14, 4),
+  EdgeInsets padding = const EdgeInsets.fromLTRB(16, 8, 12, 4),
 }) {
   return Padding(
     padding: padding,
     child: Column(mainAxisSize: MainAxisSize.min, children: [
       Row(children: [
-        if (leading != null) ...[leading, const SizedBox(width: 8)],
+        if (leading != null) ...[leading, const SizedBox(width: 6)],
         Text(title,
             style: const TextStyle(
-                fontSize: 19, fontWeight: FontWeight.w800, color: kInk)),
+                fontSize: 18, fontWeight: FontWeight.w800, color: kInk)),
         const Spacer(),
         statCounters(),
       ]),
-      const SizedBox(height: 5),
-      const StaminaRow(),
     ]),
   );
 }
 
-/// ヘッダー2行目のスタミナ。よこ幅に余裕があるので
-/// 数字もゲージも大きく、のこり時間も出せる
-class StaminaRow extends StatefulWidget {
-  const StaminaRow({super.key});
+/// ヘッダーの ⚡スタミナ。トロフィーの左に置く。
+/// 1行に みんな並ぶので 小さめ。数・ゲージ・のこり時間を よこ一列に出す
+class StaminaMini extends StatefulWidget {
+  const StaminaMini({super.key});
   @override
-  State<StaminaRow> createState() => _StaminaRowState();
+  State<StaminaMini> createState() => _StaminaMiniState();
 }
 
-class _StaminaRowState extends State<StaminaRow> {
+class _StaminaMiniState extends State<StaminaMini> {
   Timer? _tick;
 
   @override
@@ -1491,31 +1522,22 @@ class _StaminaRowState extends State<StaminaRow> {
   Widget build(BuildContext context) {
     final now = Player.stamina;
     final full = now >= Player.maxStamina;
-    return Row(children: [
-      Icon(Icons.bolt_rounded, color: now > 0 ? kStar : kHeart, size: 20),
-      const SizedBox(width: 3),
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(Icons.bolt_rounded, color: now > 0 ? kStar : kHeart, size: 15),
+      const SizedBox(width: 1),
       Text('$now',
           style: TextStyle(
               color: now > 0 ? kInk : kHeart,
               fontWeight: FontWeight.w800,
-              fontSize: 16)),
-      Text(' / ${Player.maxStamina}',
-          style: const TextStyle(
-              color: kInkSoft, fontWeight: FontWeight.w800, fontSize: 11)),
-      const SizedBox(width: 8),
-      const Expanded(child: StaminaBar(height: 8)),
+              fontSize: 12)),
+      const SizedBox(width: 3),
+      const SizedBox(width: 17, child: StaminaBar(height: 4)),
       // 満タンのときは 出さない（ゲージの色で わかる）
       if (!full) ...[
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 40,
-          child: Text(mmss(Player.secondsToNextStamina),
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                  color: kInkSoft,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12)),
-        ),
+        const SizedBox(width: 3),
+        Text(mmss(Player.secondsToNextStamina),
+            style: const TextStyle(
+                color: kInkSoft, fontWeight: FontWeight.w800, fontSize: 9)),
       ],
     ]);
   }
@@ -1535,19 +1557,21 @@ class _StatCountersRow extends StatelessWidget {
     Widget counter(IconData i, String t, Color c) => Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(i, color: c, size: 17),
-            const SizedBox(width: 2),
+            Icon(i, color: c, size: 16),
+            const SizedBox(width: 1),
             Text(t,
                 style: const TextStyle(
-                    color: kInk, fontWeight: FontWeight.w800, fontSize: 12)),
+                    color: kInk, fontWeight: FontWeight.w800, fontSize: 11)),
           ],
         );
     return Row(mainAxisSize: MainAxisSize.min, children: [
+      const StaminaMini(),
+      const SizedBox(width: 5),
       counter(Icons.emoji_events, shortNum(Player.trophies), kGold),
-      const SizedBox(width: 5),
+      const SizedBox(width: 4),
       counter(Icons.star_rounded, shortNum(Player.stars), kStar),
-      const SizedBox(width: 5),
-      const BgmButton(size: 19),
+      const SizedBox(width: 4),
+      const BgmButton(size: 18),
     ]);
   }
 }
@@ -1577,11 +1601,13 @@ Widget statTopBar({VoidCallback? onToggleBgm, Widget? leading}) {
             color: Bgm.on ? kGold : kInkSoft, size: 24),
       ),
       ]),
-      const SizedBox(height: 5),
-      const StaminaRow(),
     ]),
   );
 }
+
+/// 外枠(MainShell)の Scaffold。
+/// リーグなど 自前の Scaffold を持つ画面からでも メニューを開けるようにする
+final GlobalKey<ScaffoldState> gShellScaffold = GlobalKey<ScaffoldState>();
 
 /// いま選ばれているタブ（下メニューの共通の状態）
 final ValueNotifier<int> gTab = ValueNotifier<int>(0);
@@ -1606,6 +1632,7 @@ class MainShell extends StatelessWidget {
           PremiumScreen(),
         ];
         return Scaffold(
+          key: gShellScaffold,
           backgroundColor: kBg,
           drawer: const AppDrawer(),
           body: Column(children: [
@@ -2652,7 +2679,7 @@ class SubScreen extends StatelessWidget {
               // もどれる画面は もどる、下タブの画面は 三本線
               leading: showBack
                   ? SizedBox(
-                      width: 34,
+                      width: 30,
                       child: IconButton(
                         padding: EdgeInsets.zero,
                         icon:
@@ -5497,7 +5524,10 @@ class _BattleScreenState extends State<BattleScreen>
     setState(() {
       stroke.add(p);
       // 指の通ったところに光の粒をこぼす
-      if (stroke.length % 2 == 0) _sparks.add(Spark.at(p, _now, _rng));
+      if (stroke.length % 2 == 0) {
+        _sparks.add(Spark.at(p, _now, _rng));
+        Sfx.spark(); // 粒が出るのに あわせて キラキラ鳴らす
+      }
       _sparks.removeWhere((s) => _now - s.born > Spark.life); // 古い粒は捨てる
     });
   }

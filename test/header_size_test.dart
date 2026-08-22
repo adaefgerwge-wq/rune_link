@@ -11,7 +11,7 @@ void main() {
     Player.trophies = 999;
   });
 
-  testWidgets('下タブ5画面の スタミナ行は 同じ大きさ', (tester) async {
+  testWidgets('下タブ5画面の 上のバーは 同じ大きさ', (tester) async {
     // よこ幅は実機どおり。たては 全部が組み立てられるよう 長くとる
     tester.view.physicalSize = const Size(375, 2600);
     tester.view.devicePixelRatio = 1.0;
@@ -30,7 +30,7 @@ void main() {
       await tester.pumpWidget(MaterialApp(home: e.value));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      final box = tester.getRect(find.byType(StaminaRow).first);
+      final box = tester.getRect(find.byType(StaminaMini).first);
       // ignore: avoid_print
       print('  ${e.key}: rect=$box');
       widths[e.key] = box.width;
@@ -58,7 +58,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     const style =
-        TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: kInk);
+        TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: kInk);
 
     for (final title in ['マイページ', 'ちょうせん', 'ショップ', 'ミッション', 'ずかん']) {
       final tp = TextPainter(

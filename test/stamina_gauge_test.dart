@@ -95,7 +95,7 @@ void main() {
 
     // 見出しが 省略されないこと＝ヘッダーが まだ余っていること
     const style = TextStyle(
-        fontSize: 19, fontWeight: FontWeight.w800, color: kInk);
+        fontSize: 18, fontWeight: FontWeight.w800, color: kInk);
     final tp = TextPainter(
         text: const TextSpan(text: 'マイページ', style: style),
         textDirection: TextDirection.ltr)
