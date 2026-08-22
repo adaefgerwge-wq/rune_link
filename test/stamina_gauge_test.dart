@@ -71,7 +71,7 @@ void main() {
         findsOneWidget);
   });
 
-  testWidgets('満タンのときは 文字を出さない（色でわかる）', (tester) async {
+  testWidgets('満タンのときは 文字を出さない（ゲージが いっぱい）', (tester) async {
     usePhone(tester, height: 2400);
     await tester.pumpWidget(
         const MaterialApp(home: Scaffold(body: HomeScreen())));
@@ -85,5 +85,32 @@ void main() {
         of: find.byType(StaminaGauge),
         matching: find.byType(FractionallySizedBox)));
     expect(f.widthFactor, 1.0);
+  });
+
+  testWidgets('ゲージの色は のこりに関係なく いつも青', (tester) async {
+    usePhone(tester);
+
+    Future<Color> colorAt(int spend, String key) async {
+      await Player.reset();
+      if (spend > 0) Player.spendStamina(spend);
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: SizedBox(
+                  width: 200, child: StaminaBar(key: ValueKey(key))))));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      final box = tester.widget<Container>(find.descendant(
+          of: find.byType(FractionallySizedBox),
+          matching: find.byType(Container)));
+      return (box.color)!;
+    }
+
+    final full = await colorAt(0, 'full'); // 満タン
+    final half = await colorAt(10, 'half'); // なかば
+    final empty = await colorAt(Player.maxStamina, 'empty'); // からっぽ
+
+    expect(full, half, reason: '★満タンで 色が 変わっている');
+    expect(half, empty, reason: '★のこり0で 色が 変わっている');
+    expect(full, kStar, reason: '★青(kStar)に なっていない');
   });
 }

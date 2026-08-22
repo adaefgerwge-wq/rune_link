@@ -1278,14 +1278,10 @@ class StaminaBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final now = Player.stamina;
-    final ratio = (now / Player.maxStamina).clamp(0.0, 1.0);
-    final full = now >= Player.maxStamina;
-    final color = now == 0
-        ? kHeart
-        : full
-            ? kGreen
-            : kStar;
+    final ratio =
+        (Player.stamina / Player.maxStamina).clamp(0.0, 1.0);
+    // 色は 変えない。のこりは 長さだけで あらわす
+    const color = kStar;
     return ClipRRect(
       borderRadius: BorderRadius.circular(999),
       child: SizedBox(
@@ -1347,18 +1343,16 @@ class _StaminaGaugeState extends State<StaminaGauge> {
       ),
       child: Column(children: [
         Row(children: [
-          Icon(Icons.bolt_rounded, color: now > 0 ? kStar : kHeart, size: 22),
+          const Icon(Icons.bolt_rounded, color: kStar, size: 22),
           const SizedBox(width: 4),
           Text('$now',
-              style: TextStyle(
-                  color: now > 0 ? kInk : kHeart,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 20)),
+              style: const TextStyle(
+                  color: kInk, fontWeight: FontWeight.w800, fontSize: 20)),
           Text(' / ${Player.maxStamina}',
               style: const TextStyle(
                   color: kInkSoft, fontWeight: FontWeight.w800, fontSize: 13)),
           const Spacer(),
-          // 満タンのときは 文字を出さない（ゲージの色が緑になるので わかる）
+          // 満タンのときは 文字を出さない（ゲージが いっぱいなので わかる）
           if (!full)
             Text('つぎまで ${mmss(Player.secondsToNextStamina)}',
                 style: const TextStyle(
@@ -1537,17 +1531,15 @@ class _StaminaRowState extends State<StaminaRow> {
     final now = Player.stamina;
     final full = now >= Player.maxStamina;
     return Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(Icons.bolt_rounded, color: now > 0 ? kStar : kHeart, size: 19),
+      const Icon(Icons.bolt_rounded, color: kStar, size: 19),
       const SizedBox(width: 3),
       Text('$now',
-          style: TextStyle(
-              color: now > 0 ? kInk : kHeart,
-              fontWeight: FontWeight.w800,
-              fontSize: 15)),
+          style: const TextStyle(
+              color: kInk, fontWeight: FontWeight.w800, fontSize: 15)),
       const SizedBox(width: 4),
       // 幅を のばさず 固定にする＝見出しの長さに関係なく 同じ見え方になる
       const SizedBox(width: 44, child: StaminaBar(height: 7)),
-      // 満タンのときは 出さない（ゲージの色で わかる）
+      // 満タンのときは 出さない（ゲージが いっぱいなので わかる）
       if (!full) ...[
         const SizedBox(width: 8),
         Text(mmss(Player.secondsToNextStamina),

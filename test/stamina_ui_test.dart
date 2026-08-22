@@ -113,7 +113,7 @@ void main() {
         home: Scaffold(body: Center(child: StaminaRow()))));
     await tester.pump();
 
-    // 満タンのときは 時間を出さない（ゲージの色で わかる）
+    // 満タンのときは 時間を出さない（ゲージが いっぱいなので わかる）
     expect(find.text('20'), findsOneWidget);
     expect(find.byType(StaminaBar), findsOneWidget);
     expect(find.textContaining(':'), findsNothing);
