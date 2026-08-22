@@ -1241,8 +1241,7 @@ String mmss(int sec) {
 /// 0になったら 赤にして ひと目で気づけるようにする
 class StaminaBar extends StatelessWidget {
   final double height;
-  final bool showSegments;
-  const StaminaBar({super.key, this.height = 6, this.showSegments = false});
+  const StaminaBar({super.key, this.height = 6});
 
   @override
   Widget build(BuildContext context) {
@@ -1270,28 +1269,6 @@ class StaminaBar extends StatelessWidget {
               child: Container(color: color),
             ),
           ),
-          // バトル1回ぶん(⚡1)の 目もり
-          if (showSegments)
-            Row(
-              children: List.generate(
-                Player.maxStamina,
-                (i) => Expanded(
-                  child: Container(
-                    margin: EdgeInsets.only(
-                        right: i == Player.maxStamina - 1 ? 0 : 1),
-                    color: Colors.transparent,
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Container(
-                          width: 1,
-                          color: i == Player.maxStamina - 1
-                              ? Colors.transparent
-                              : Colors.white.withValues(alpha: 0.55)),
-                    ),
-                  ),
-                ),
-              ),
-            ),
         ]),
       ),
     );
@@ -1358,8 +1335,7 @@ class _StaminaGaugeState extends State<StaminaGauge> {
                   fontSize: 12)),
         ]),
         const SizedBox(height: 8),
-        // 目もり付き＝バトル何回ぶん のこっているかが 数えられる
-        const StaminaBar(height: 12, showSegments: true),
+        const StaminaBar(height: 12),
       ]),
     );
   }
