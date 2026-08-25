@@ -178,10 +178,3 @@ MIT License（`LICENSE` を見てください）。
 - `assets/fonts/` … M PLUS Rounded 1c（SIL Open Font License）
 - `assets/sfx/*.wav` … Pythonで自作合成した音
 
----
-
-## コードを直す人へ
-
-このリポジトリの 決まりごと・ハマりどころは **[CLAUDE.md](CLAUDE.md)** にまとめてある。
-（ヘッダーの幅の制約、判定表示の考えかた、バランスの数字、
-プレビューでの操作方法 など）
