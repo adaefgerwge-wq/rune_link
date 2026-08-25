@@ -28,12 +28,10 @@
 
 ## 動かし方
 
-このフォルダ（`/Users/tetsuro/practice/rune_link`）が
-プロジェクトのルート。accounting とは切り離した独立プロジェクト。
+このフォルダが プロジェクトのルート。ほかとは 切り離した独立プロジェクト。
 
 ### パソコンで開発しながら見る
 ```bash
-cd /Users/tetsuro/practice/rune_link
 flutter run -d web-server --web-port 5179 --web-hostname 127.0.0.1
 ```
 → ブラウザで http://localhost:5179
@@ -253,3 +251,15 @@ git add -A && git commit -m "メッセージ" && git push
 - 同じ入口を複数作らない（重複メニューは削除する）
 - 半透明で背景が透けて読みにくいのはNG（白と混ぜて不透明にする）
 - ループアニメの継ぎ目が見えるのはNG（速度を整数倍にして解決した）
+
+---
+
+## ライセンス
+
+MIT License（`LICENSE` を見てください）。
+
+ただし `assets/` の中身は 出どころが ちがうので 注意：
+
+- `hero.png` / `enemy.png` … AIで生成した画像
+- `assets/fonts/` … M PLUS Rounded 1c（SIL Open Font License）
+- `assets/sfx/*.wav` … Pythonで自作合成した音

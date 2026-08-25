@@ -3,10 +3,15 @@
   "configurations": [
     {
       "name": "rune-link",
-      "runtimeExecutable": "bash",
+      "runtimeExecutable": "flutter",
       "runtimeArgs": [
-        "-lc",
-        "cd /Users/tetsuro/practice/rune_link && /opt/homebrew/bin/flutter run -d web-server --web-port 5179 --web-hostname 127.0.0.1"
+        "run",
+        "-d",
+        "web-server",
+        "--web-port",
+        "5179",
+        "--web-hostname",
+        "127.0.0.1"
       ],
       "port": 5179
     }
