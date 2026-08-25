@@ -2,6 +2,9 @@
 
 ゆびで「印」を描いて戦う、スマホ向けRPG。Flutter製。
 
+**▶ あそぶ： https://adaefgerwge-wq.github.io/rune_link/**
+（スマホのブラウザでも動きます。初回だけ 読みこみに 20秒ほど かかります）
+
 ---
 
 ## これは何のゲームか
@@ -182,12 +185,13 @@ window.tap = (x, y) => new Promise(res => {
 ## 次にやること
 
 1. **敵3体の絵**（こおり／ほのお／そらのぬし）を生成して `assets/` に置く
-2. 遊びの深み：印の種類を増やす／敵の攻撃予告／属性の精霊キャラ
-3. iOS・Androidの実機ビルド（今はWebのみ。`android/` `ios/` フォルダは無い）
-4. リーグが仮データのまま（ライバル7人が定数で埋め込まれていて 永久に動かない）。
+2. **読みこみを軽くする**（フォントのサブセット化・BGMのMP3化）。
+   いまは 初回5MB＋音4MB で、スマホの回線だと 20秒ほど待たされる
+3. リーグが仮データのまま（ライバル7人が定数で埋め込まれていて 永久に動かない）。
    プレミアムも見た目だけ＝**下タブ5つのうち2つが飾り**になっている
-5. ⭐は強化を上げ切る（合計2900⭐）と 使い道が きせかえとスタミナ回復だけになる
-6. コンボ（3種類を続けて描くと大ダメージ）は 未実装。弱点一辺倒をさらに崩せる
+4. ⭐は強化を上げ切る（合計2900⭐）と 使い道が きせかえとスタミナ回復だけになる
+5. コンボ（3種類を続けて描くと大ダメージ）は 未実装。弱点一辺倒をさらに崩せる
+6. iOS・Androidの実機ビルド（今はWebのみ。`android/` `ios/` フォルダは無い）
 
 ---
 
@@ -206,13 +210,61 @@ window.tap = (x, y) => new Promise(res => {
 **時間で消さず、つぎの印を描きはじめるまで出しっぱなし**にしている。
 （最初2.2秒で消していたが、反撃の演出と重なって読む間がなかった）
 
-## GitHub
+## 公開のしかた
 
-https://github.com/adaefgerwge-wq/rune_link （SSH でpush）
+### GitHub Pages（こっちが本番・自動）
+
+https://adaefgerwge-wq.github.io/rune_link/
+
+`main` に push すると `.github/workflows/deploy.yml` が動いて、
+**テストが通ったときだけ** 公開される。やることは push だけ。
 
 ```bash
 git add -A && git commit -m "メッセージ" && git push
 ```
+
+ワークフローの中でやっていること：
+
+1. `flutter analyze --no-fatal-infos`
+   … info は もとから30件あるので 止めない。warning と error だけ 失敗にする
+2. `flutter test`（84件）
+3. `flutter build web --release --pwa-strategy=none --base-href /rune_link/`
+
+> **⚠️ `--base-href /rune_link/` は 消さないこと**
+> GitHub Pages は `ユーザー名.github.io/rune_link/` の下に置かれる。
+> これが無いと アセットを ぜんぶ `/` から取りに行って 404になり、
+> 真っ白な画面になる。（Vercel はルート直下なので これが要らない＝ちがう）
+
+進み具合は `gh run list` か、GitHubの Actions タブで見られる。
+初回は Flutter SDK の取得もあるので 4〜5分かかる。
+
+### Vercel（手動・おまけ）
+
+https://rune-link.vercel.app
+
+push しても **自動では更新されない**。更新するには 毎回この2つ：
+
+```bash
+flutter build web --release --pwa-strategy=none
+npx vercel deploy build/web --prod --yes
+```
+
+（`npx` が `EACCES` で落ちるときは `sudo chown -R $(id -u):$(id -g) ~/.npm`）
+
+### 読みこみの重さ（気にするならここ）
+
+初回に 5MBほど 落ちてくる（brotli圧縮後の実測）。
+
+| 中身 | 転送量 |
+|---|---|
+| `canvaskit.wasm`（描画エンジン） | 2.8MB |
+| 日本語フォント | 1.5MB |
+| `main.dart.js` | 0.8MB |
+| BGM・効果音（再生時に追加） | 4.1MB（非圧縮WAV） |
+
+減らすなら 効く順に：
+**フォントのサブセット化**（1.5MB→数十KB）→ **BGMをMP3化**（4.1MB→300KB前後）
+→ 画像のPNG最適化。CanvasKit を切ると `CustomPaint` の描画が落ちるので さわらない。
 
 ---
 
